@@ -1,0 +1,10 @@
+node_modules/
+**/node_modules/
+client/dist/
+server/data/orders.json
+server/data/sessions.json
+server/data/newsletter.json
+.env
+*.db
+__pycache__/
+.DS_Store

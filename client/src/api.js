@@ -1,0 +1,155 @@
+const API = '/api';
+
+async function request(url, options = {}) {
+  const headers = { 'Content-Type': 'application/json', ...options.headers };
+  const token = localStorage.getItem('adminToken');
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const res = await fetch(url, { ...options, headers });
+  const data = await res.json().catch(() => ({}));
+  if (!res.ok) throw new Error(data.error || 'שגיאה בשרת');
+  return data;
+}
+
+export async function fetchStore() {
+  return request(`${API}/store`);
+}
+
+export async function fetchProducts(params = {}) {
+  const qs = new URLSearchParams(params).toString();
+  return request(`${API}/products${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchProduct(id) {
+  return request(`${API}/products/${id}`);
+}
+
+export async function fetchRelated(id) {
+  return request(`${API}/products/${id}/related`);
+}
+
+export async function fetchCategories() {
+  return request(`${API}/categories`);
+}
+
+export async function fetchReviews(productId) {
+  return request(`${API}/products/${productId}/reviews`);
+}
+
+export async function addReview(productId, review) {
+  return request(`${API}/products/${productId}/reviews`, {
+    method: 'POST',
+    body: JSON.stringify(review),
+  });
+}
+
+export async function validateCoupon(code, subtotal) {
+  return request(`${API}/coupons/validate`, {
+    method: 'POST',
+    body: JSON.stringify({ code, subtotal }),
+  });
+}
+
+export async function subscribeNewsletter(email) {
+  return request(`${API}/newsletter`, {
+    method: 'POST',
+    body: JSON.stringify({ email }),
+  });
+}
+
+export async function createOrder(order) {
+  return request(`${API}/orders`, { method: 'POST', body: JSON.stringify(order) });
+}
+
+export async function trackOrder(orderId, email) {
+  return request(`${API}/orders/track?orderId=${orderId}&email=${encodeURIComponent(email)}`);
+}
+
+export async function adminLogin(password) {
+  return request(`${API}/admin/login`, { method: 'POST', body: JSON.stringify({ password }) });
+}
+
+export async function adminStats() {
+  return request(`${API}/admin/stats`);
+}
+
+export async function adminProducts() {
+  return request(`${API}/admin/products`);
+}
+
+export async function adminCreateProduct(product) {
+  return request(`${API}/admin/products`, { method: 'POST', body: JSON.stringify(product) });
+}
+
+export async function adminUpdateProduct(id, product) {
+  return request(`${API}/admin/products/${id}`, { method: 'PUT', body: JSON.stringify(product) });
+}
+
+export async function adminDeleteProduct(id) {
+  return request(`${API}/admin/products/${id}`, { method: 'DELETE' });
+}
+
+export async function adminOrders() {
+  return request(`${API}/admin/orders`);
+}
+
+export async function adminUpdateOrderStatus(id, updates) {
+  return request(`${API}/admin/orders/${id}`, { method: 'PATCH', body: JSON.stringify(updates) });
+}
+
+export async function exportOrdersCsv() {
+  const token = localStorage.getItem('adminToken');
+  const res = await fetch(`${API}/admin/export/orders`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (!res.ok) throw new Error('שגיאה בייצוא');
+  const blob = await res.blob();
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `orders-${Date.now()}.csv`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+export async function adminUpdateStore(store) {
+  return request(`${API}/admin/store`, { method: 'PUT', body: JSON.stringify(store) });
+}
+
+export async function adminLogout() {
+  return request(`${API}/admin/logout`, { method: 'POST' });
+}
+
+export async function adminCoupons() {
+  return request(`${API}/admin/coupons`);
+}
+
+export async function adminCreateCoupon(coupon) {
+  return request(`${API}/admin/coupons`, { method: 'POST', body: JSON.stringify(coupon) });
+}
+
+export async function adminDeleteCoupon(code) {
+  return request(`${API}/admin/coupons/${code}`, { method: 'DELETE' });
+}
+
+export async function adminDuplicateProduct(id) {
+  return request(`${API}/admin/products/${id}/duplicate`, { method: 'POST' });
+}
+
+
+export function formatPrice(price) {
+  const n = Number(price);
+  if (!Number.isFinite(n)) return '₪0';
+  return new Intl.NumberFormat('he-IL', {
+    style: 'currency',
+    currency: 'ILS',
+    maximumFractionDigits: 0,
+  }).format(n);
+}
+
+export const ORDER_STATUS = {
+  pending: { label: 'ממתין לאישור', color: 'warning' },
+  confirmed: { label: 'אושר', color: 'info' },
+  shipped: { label: 'נשלח', color: 'primary' },
+  delivered: { label: 'נמסר', color: 'success' },
+  cancelled: { label: 'בוטל', color: 'danger' },
+};

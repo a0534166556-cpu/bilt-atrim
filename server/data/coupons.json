@@ -1,0 +1,18 @@
+[
+  {
+    "code": "WELCOME10",
+    "type": "percent",
+    "value": 10,
+    "minOrder": 100,
+    "active": true,
+    "expiresAt": "2026-12-31"
+  },
+  {
+    "code": "SAVE50",
+    "type": "fixed",
+    "value": 50,
+    "minOrder": 200,
+    "active": true,
+    "expiresAt": null
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "name": "NovaShop — Find It. Love It.",
+  "tagline": "NovaShop ",
+  "email": "support@example.com",
+  "phone": "0508254935",
+  "whatsapp": "972501234567",
+  "address": "ישראל",
+  "shippingInfo": "משלוח חינם בהזמנה מעל 300 ₪ | 5-8 ימי עסקים",
+  "freeShippingMin": 300
+}
