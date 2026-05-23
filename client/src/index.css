@@ -560,9 +560,87 @@ img {
   font-size: 0.95rem;
 }
 
+.payment-heading {
+  margin-top: 1.5rem;
+  margin-bottom: 0.75rem;
+}
+
+.payment-methods {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 1.25rem;
+}
+
+.payment-option {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 2px solid var(--border);
+  border-radius: var(--radius);
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s;
+}
+
+.payment-option.selected {
+  border-color: var(--primary);
+  background: #e8f0fe;
+}
+
+.payment-option input {
+  margin-top: 0.25rem;
+}
+
+.payment-option-body {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.payment-option-body small {
+  color: var(--text-muted);
+}
+
+.payment-secure-note {
+  text-align: center;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 0.5rem;
+}
+
+.payment-confirmed {
+  color: #137333;
+  font-weight: 600;
+}
+
+.payment-pending {
+  color: #b06000;
+}
+
 .error {
   color: #ea4335;
   margin-bottom: 1rem;
+}
+
+.api-error-box {
+  background: #fef7e0;
+  border: 1px solid #f9ab00;
+  border-radius: var(--radius);
+  padding: 1.25rem;
+  max-width: 480px;
+}
+
+.api-error-box .hint {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin-top: 0.75rem;
+}
+
+.api-error-box code {
+  background: #fff;
+  padding: 0.1rem 0.35rem;
+  border-radius: 4px;
 }
 
 /* Google banner */

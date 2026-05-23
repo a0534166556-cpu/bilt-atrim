@@ -1,6 +1,12 @@
 import { useState } from 'react';
 import { Helmet } from 'react-helmet-async';
-import { trackOrder, formatPrice, ORDER_STATUS } from '../api';
+import {
+  trackOrder,
+  formatPrice,
+  ORDER_STATUS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+} from '../api';
 
 export default function TrackOrder() {
   const [orderId, setOrderId] = useState('');
@@ -53,6 +59,12 @@ export default function TrackOrder() {
           </span>
           <p><strong>תאריך:</strong> {new Date(order.createdAt).toLocaleString('he-IL')}</p>
           <p><strong>סכום:</strong> {formatPrice(order.total)}</p>
+          <p>
+            <strong>תשלום:</strong>{' '}
+            {PAYMENT_METHOD_LABELS[order.paymentMethod] || order.paymentMethod}
+            {' – '}
+            {PAYMENT_STATUS_LABELS[order.paymentStatus] || order.paymentStatus}
+          </p>
           <p><strong>כתובת:</strong> {order.address}{order.city ? `, ${order.city}` : ''}</p>
           {order.trackingNumber && (
             <p className="tracking-number">

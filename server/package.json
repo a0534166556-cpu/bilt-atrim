@@ -9,6 +9,7 @@
   "dependencies": {
     "cors": "^2.8.5",
     "express": "^4.21.2",
-    "google-market-shop": "file:.."
+    "mysql2": "^3.22.3",
+    "stripe": "^22.1.1"
   }
 }

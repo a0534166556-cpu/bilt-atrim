@@ -1,23 +1,47 @@
-import { useState } from 'react';
-import { useNavigate, Link } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link, useSearchParams } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
-import { createOrder, validateCoupon, formatPrice } from '../api';
+import {
+  createOrder,
+  createStripeCheckout,
+  fetchPaymentConfig,
+  validateCoupon,
+  formatPrice,
+} from '../api';
 import { useToast } from '../context/ToastContext';
 
 export default function Checkout() {
   const { items, total, clearCart } = useCart();
   const { store } = useStore();
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { showToast } = useToast();
   const [loading, setLoading] = useState(false);
   const [couponInput, setCouponInput] = useState('');
   const [discount, setDiscount] = useState(0);
   const [appliedCoupon, setAppliedCoupon] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState('cod');
+  const [stripeEnabled, setStripeEnabled] = useState(false);
   const [form, setForm] = useState({
     name: '', email: '', phone: '', address: '', city: '', notes: '',
   });
+
+  useEffect(() => {
+    fetchPaymentConfig()
+      .then((cfg) => {
+        setStripeEnabled(cfg.stripeEnabled);
+        if (cfg.stripeEnabled) setPaymentMethod('stripe');
+      })
+      .catch(() => {});
+  }, []);
+
+  useEffect(() => {
+    if (searchParams.get('cancelled') === '1') {
+      showToast('התשלום בוטל – אפשר לנסות שוב', 'error');
+    }
+  }, [searchParams, showToast]);
 
   const subtotal = total;
   const afterDiscount = subtotal - discount;
@@ -51,21 +75,29 @@ export default function Checkout() {
     }
   };
 
+  const orderPayload = () => ({
+    ...form,
+    couponCode: appliedCoupon || undefined,
+    items: items.map((i) => ({
+      id: i.id,
+      name: i.name,
+      quantity: i.quantity,
+      price: i.effectivePrice ?? i.price,
+    })),
+  });
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (loading) return;
     setLoading(true);
     try {
-      const data = await createOrder({
-        ...form,
-        couponCode: appliedCoupon || undefined,
-        items: items.map((i) => ({
-          id: i.id,
-          name: i.name,
-          quantity: i.quantity,
-          price: i.effectivePrice ?? i.price,
-        })),
-      });
+      if (paymentMethod === 'stripe' && stripeEnabled) {
+        const data = await createStripeCheckout(orderPayload());
+        clearCart();
+        window.location.href = data.checkoutUrl;
+        return;
+      }
+      const data = await createOrder({ ...orderPayload(), paymentMethod: 'cod' });
       clearCart();
       navigate(`/order-success/${data.orderId}`);
     } catch (err) {
@@ -74,6 +106,11 @@ export default function Checkout() {
       setLoading(false);
     }
   };
+
+  const submitLabel =
+    paymentMethod === 'stripe' && stripeEnabled
+      ? `תשלום מאובטח – ${formatPrice(grandTotal)}`
+      : `אישור הזמנה – ${formatPrice(grandTotal)}`;
 
   return (
     <>
@@ -118,9 +155,44 @@ export default function Checkout() {
               <p className="coupon-applied">✓ קופון {appliedCoupon} – הנחה {formatPrice(discount)}</p>
             )}
 
+            <h2 className="payment-heading">אמצעי תשלום</h2>
+            <div className="payment-methods">
+              {stripeEnabled && (
+                <label className={`payment-option ${paymentMethod === 'stripe' ? 'selected' : ''}`}>
+                  <input
+                    type="radio"
+                    name="paymentMethod"
+                    value="stripe"
+                    checked={paymentMethod === 'stripe'}
+                    onChange={() => setPaymentMethod('stripe')}
+                  />
+                  <span className="payment-option-body">
+                    <strong>כרטיס אשראי</strong>
+                    <small>תשלום מאובטח דרך Stripe (Visa, Mastercard, וכו׳)</small>
+                  </span>
+                </label>
+              )}
+              <label className={`payment-option ${paymentMethod === 'cod' ? 'selected' : ''}`}>
+                <input
+                  type="radio"
+                  name="paymentMethod"
+                  value="cod"
+                  checked={paymentMethod === 'cod'}
+                  onChange={() => setPaymentMethod('cod')}
+                />
+                <span className="payment-option-body">
+                  <strong>מזומן / העברה בנקאית</strong>
+                  <small>תשלום בעת קבלת המשלוח או לפי הוראות שנשלחו במייל</small>
+                </span>
+              </label>
+            </div>
+
             <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={loading}>
-              {loading ? 'מעבד...' : `אישור – ${formatPrice(grandTotal)}`}
+              {loading ? 'מעבד...' : submitLabel}
             </button>
+            {paymentMethod === 'stripe' && stripeEnabled && (
+              <p className="payment-secure-note">🔒 מועבר לדף תשלום מאובטח של Stripe</p>
+            )}
           </form>
           <aside className="checkout-summary">
             <h2>סיכום</h2>

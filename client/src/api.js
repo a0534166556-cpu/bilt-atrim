@@ -56,6 +56,18 @@ export async function subscribeNewsletter(email) {
   });
 }
 
+export async function fetchPaymentConfig() {
+  return request(`${API}/payments/config`);
+}
+
+export async function createStripeCheckout(order) {
+  return request(`${API}/payments/checkout`, { method: 'POST', body: JSON.stringify(order) });
+}
+
+export async function verifyPayment(sessionId) {
+  return request(`${API}/payments/verify?session_id=${encodeURIComponent(sessionId)}`);
+}
+
 export async function createOrder(order) {
   return request(`${API}/orders`, { method: 'POST', body: JSON.stringify(order) });
 }
@@ -147,9 +159,21 @@ export function formatPrice(price) {
 }
 
 export const ORDER_STATUS = {
+  awaiting_payment: { label: 'ממתין לתשלום', color: 'warning' },
   pending: { label: 'ממתין לאישור', color: 'warning' },
   confirmed: { label: 'אושר', color: 'info' },
   shipped: { label: 'נשלח', color: 'primary' },
   delivered: { label: 'נמסר', color: 'success' },
   cancelled: { label: 'בוטל', color: 'danger' },
+};
+
+export const PAYMENT_METHOD_LABELS = {
+  stripe: 'כרטיס אשראי',
+  cod: 'מזומן / העברה',
+};
+
+export const PAYMENT_STATUS_LABELS = {
+  pending: 'ממתין לתשלום',
+  paid: 'שולם',
+  failed: 'נכשל',
 };

@@ -1,6 +1,14 @@
 import { useEffect, useState } from 'react';
 import AdminLayout from '../../components/AdminLayout';
-import { adminOrders, adminUpdateOrderStatus, formatPrice, ORDER_STATUS, exportOrdersCsv } from '../../api';
+import {
+  adminOrders,
+  adminUpdateOrderStatus,
+  formatPrice,
+  ORDER_STATUS,
+  PAYMENT_METHOD_LABELS,
+  PAYMENT_STATUS_LABELS,
+  exportOrdersCsv,
+} from '../../api';
 import { useToast } from '../../context/ToastContext';
 
 export default function AdminOrders() {
@@ -71,6 +79,7 @@ export default function AdminOrders() {
             <th>לקוח</th>
             <th>פריטים</th>
             <th>סכום</th>
+            <th>תשלום</th>
             <th>סטטוס</th>
             <th>מעקב</th>
             <th>תאריך</th>
@@ -96,6 +105,13 @@ export default function AdminOrders() {
                 {o.couponCode && <small><br />קופון: {o.couponCode}</small>}
               </td>
               <td>{formatPrice(o.total)}</td>
+              <td>
+                <small>{PAYMENT_METHOD_LABELS[o.paymentMethod] || o.paymentMethod}</small>
+                <br />
+                <span className={`status-badge status-${o.paymentStatus === 'paid' ? 'success' : 'warning'}`}>
+                  {PAYMENT_STATUS_LABELS[o.paymentStatus] || o.paymentStatus}
+                </span>
+              </td>
               <td>
                 <span className={`status-badge status-${ORDER_STATUS[o.status]?.color}`}>
                   {ORDER_STATUS[o.status]?.label}

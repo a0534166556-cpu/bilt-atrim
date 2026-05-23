@@ -10,6 +10,7 @@ export default function Products() {
   const [products, setProducts] = useState([]);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [apiError, setApiError] = useState('');
   const q = searchParams.get('q') || '';
 
   useEffect(() => {
@@ -19,9 +20,13 @@ export default function Products() {
   useEffect(() => {
     setLoading(true);
     const params = Object.fromEntries(searchParams.entries());
+    setApiError('');
     fetchProducts(params)
       .then(setProducts)
-      .catch(console.error)
+      .catch((err) => {
+        setProducts([]);
+        setApiError(err.message || 'שגיאה בטעינת מוצרים');
+      })
       .finally(() => setLoading(false));
   }, [searchParams]);
 
@@ -38,6 +43,12 @@ export default function Products() {
             {loading ? (
               <div className="loading-grid">
                 {[1, 2, 3, 4].map((i) => <div key={i} className="skeleton-card" />)}
+              </div>
+            ) : apiError ? (
+              <div className="empty api-error-box">
+                <p><strong>החנות עדיין לא מחוברת לשרת</strong></p>
+                <p>{apiError}</p>
+                <p className="hint">ב-Netlify הוסף <code>RAILWAY_BACKEND_URL</code> וב-Railway ודא ש-MySQL מחובר ו-<code>/api/health</code> עובד.</p>
               </div>
             ) : products.length === 0 ? (
               <p className="empty">לא נמצאו מוצרים</p>
