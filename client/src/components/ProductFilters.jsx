@@ -20,7 +20,7 @@ export default function ProductFilters({ categories }) {
           onChange={(e) => update('category', e.target.value)}
         >
           <option value="">הכל</option>
-          {categories.map((c) => (
+          {(Array.isArray(categories) ? categories : []).map((c) => (
             <option key={c.id} value={c.id}>{c.name}</option>
           ))}
         </select>

@@ -14,7 +14,9 @@ export default function Products() {
   const q = searchParams.get('q') || '';
 
   useEffect(() => {
-    fetchCategories().then(setCategories);
+    fetchCategories()
+      .then(setCategories)
+      .catch(() => setCategories([]));
   }, []);
 
   useEffect(() => {

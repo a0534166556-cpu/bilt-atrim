@@ -5,8 +5,23 @@ async function request(url, options = {}) {
   const token = localStorage.getItem('adminToken');
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(url, { ...options, headers });
-  const data = await res.json().catch(() => ({}));
+  const text = await res.text();
+  let data;
+  try {
+    data = text ? JSON.parse(text) : {};
+  } catch {
+    throw new Error(
+      'השרת לא מחובר – הוסף RAILWAY_BACKEND_URL ב-Netlify ועשה Deploy, או בדוק ש-Railway Online'
+    );
+  }
   if (!res.ok) throw new Error(data.error || 'שגיאה בשרת');
+  return data;
+}
+
+function ensureArray(data, label) {
+  if (!Array.isArray(data)) {
+    throw new Error(`${label} – בדוק חיבור Railway ב-Netlify`);
+  }
   return data;
 }
 
@@ -16,7 +31,8 @@ export async function fetchStore() {
 
 export async function fetchProducts(params = {}) {
   const qs = new URLSearchParams(params).toString();
-  return request(`${API}/products${qs ? `?${qs}` : ''}`);
+  const data = await request(`${API}/products${qs ? `?${qs}` : ''}`);
+  return ensureArray(data, 'מוצרים');
 }
 
 export async function fetchProduct(id) {
@@ -28,7 +44,8 @@ export async function fetchRelated(id) {
 }
 
 export async function fetchCategories() {
-  return request(`${API}/categories`);
+  const data = await request(`${API}/categories`);
+  return ensureArray(data, 'קטגוריות');
 }
 
 export async function fetchReviews(productId) {
