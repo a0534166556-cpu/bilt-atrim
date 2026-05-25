@@ -254,7 +254,7 @@ function mapProduct(row) {
     brand: row.brand || '',
     category: row.category_id,
     googleCategory: row.google_category || '',
-    stock: row.stock,
+    stock: Number(row.stock) || 0,
     gtin: row.gtin || '',
     featured: !!row.featured,
     active: !!row.active,

@@ -52,12 +52,15 @@ export default function ProductDetail() {
   }
   if (!product) return <div className="container page"><p className="loading">טוען...</p></div>;
 
-  const outOfStock = product.stock === 0;
+  const outOfStock = Number(product.stock) === 0;
 
   const handleAdd = () => {
-    if (outOfStock) return;
-    addItem(product, quantity);
-    showToast('נוסף לסל!');
+    if (outOfStock) {
+      showToast('המוצר אזל מהמלאי', 'error');
+      return;
+    }
+    const ok = addItem(product, quantity);
+    showToast(ok ? 'נוסף לסל!' : 'לא ניתן להוסיף לסל', ok ? 'success' : 'error');
   };
 
   const shareProduct = async () => {

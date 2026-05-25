@@ -9,13 +9,17 @@ export default function ProductCard({ product }) {
   const { toggle, has } = useWishlist();
   const { addItem } = useCart();
   const { showToast } = useToast();
-  const outOfStock = product.stock === 0;
+  const outOfStock = Number(product.stock) === 0;
 
   const handleQuickAdd = (e) => {
     e.preventDefault();
-    if (outOfStock) return;
-    addItem(product, 1);
-    showToast('נוסף לסל!');
+    e.stopPropagation();
+    if (outOfStock) {
+      showToast('המוצר אזל מהמלאי', 'error');
+      return;
+    }
+    const ok = addItem(product, 1);
+    showToast(ok ? 'נוסף לסל!' : 'לא ניתן להוסיף לסל', ok ? 'success' : 'error');
   };
 
   return (
@@ -60,6 +64,7 @@ export default function ProductCard({ product }) {
             פרטים
           </Link>
           <button
+            type="button"
             className="btn btn-primary btn-sm"
             onClick={handleQuickAdd}
             disabled={outOfStock}

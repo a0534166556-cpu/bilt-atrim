@@ -2,6 +2,13 @@ import { createContext, useContext, useState, useEffect, useCallback } from 'rea
 
 const CartContext = createContext(null);
 
+export function getProductStock(product) {
+  const n = Number(product?.stock);
+  if (product?.stock === 0 || n === 0) return 0;
+  if (!Number.isFinite(n) || n < 1) return 99;
+  return Math.floor(n);
+}
+
 function normalizeCartItem(item) {
   if (!item || item.id == null) return null;
   const price = Number(item.effectivePrice ?? item.price) || 0;
@@ -10,7 +17,7 @@ function normalizeCartItem(item) {
     name: item.name || 'מוצר',
     image: item.image || '',
     brand: item.brand || '',
-    stock: Math.max(0, Number(item.stock) || 99),
+    stock: getProductStock(item),
     quantity: Math.max(1, Number(item.quantity) || 1),
     price,
     effectivePrice: price,
@@ -40,13 +47,13 @@ export function CartProvider({ children }) {
   }, []);
 
   const addItem = useCallback((product, quantity = 1) => {
-    if (!product?.id) return;
+    if (!product?.id) return false;
     const price = Number(product.effectivePrice ?? product.price) || 0;
-    const maxStock = Math.max(0, Number(product.stock) ?? 99);
-    if (maxStock === 0) return;
+    const maxStock = getProductStock(product);
+    if (maxStock === 0) return false;
 
     const numId = Number(product.id);
-    const qty = Math.max(1, Math.min(quantity, maxStock));
+    const qty = Math.max(1, Math.min(Math.max(1, Number(quantity) || 1), maxStock));
 
     setItems((prev) => {
       const existing = prev.find((i) => Number(i.id) === numId);
@@ -78,6 +85,7 @@ export function CartProvider({ children }) {
         }),
       ].filter(Boolean);
     });
+    return true;
   }, []);
 
   const updateQuantity = useCallback(
@@ -109,7 +117,7 @@ export function CartProvider({ children }) {
       const next = [];
       for (const item of prev) {
         const product = byId.get(Number(item.id));
-        if (!product || product.active === false || product.stock === 0) continue;
+        if (!product || product.active === false || getProductStock(product) === 0) continue;
         const price = Number(product.effectivePrice ?? product.price) || 0;
         next.push(
           normalizeCartItem({
