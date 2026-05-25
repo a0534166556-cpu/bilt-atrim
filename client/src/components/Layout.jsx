@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useStore } from '../context/StoreContext';
+import PromoBanner from './PromoBanner';
 
 export default function Layout({ children }) {
   const { count } = useCart();
@@ -58,6 +59,7 @@ export default function Layout({ children }) {
 
           <nav className={`nav ${menuOpen ? 'nav-open' : ''}`}>
             <Link to="/products" onClick={() => setMenuOpen(false)}>מוצרים</Link>
+            <Link to="/sales" onClick={() => setMenuOpen(false)} className="nav-sale">מבצעים</Link>
             <Link to="/wishlist" onClick={() => setMenuOpen(false)}>מועדפים ({wishCount})</Link>
             <Link to="/track-order" onClick={() => setMenuOpen(false)}>מעקב הזמנה</Link>
             <Link to="/contact" onClick={() => setMenuOpen(false)}>צור קשר</Link>
@@ -75,6 +77,8 @@ export default function Layout({ children }) {
         </div>
       </header>
 
+      <PromoBanner />
+
       <main className="main">{children}</main>
 
       <footer className="footer">
@@ -84,11 +88,18 @@ export default function Layout({ children }) {
             <p>{store?.tagline}</p>
           </div>
           <div>
-            <h4>קישורים</h4>
-            <Link to="/products">מוצרים</Link>
+            <h4>קניות</h4>
+            <Link to="/products">כל המוצרים</Link>
+            <Link to="/sales">מבצעים</Link>
+            <Link to="/wishlist">מועדפים</Link>
+            <Link to="/cart">סל קניות</Link>
+          </div>
+          <div>
+            <h4>שירות</h4>
             <Link to="/track-order">מעקב הזמנה</Link>
+            <Link to="/shipping">משלוחים</Link>
+            <Link to="/returns">החזרות</Link>
             <Link to="/contact">צור קשר</Link>
-            <a href="/feed/google-shopping.xml" target="_blank" rel="noreferrer">פיד Google</a>
           </div>
           <div>
             <h4>יצירת קשר</h4>

@@ -140,9 +140,19 @@ export default function ProductDetail() {
             <div className="product-prices-lg">
               <span className="product-price-lg">{formatPrice(product.effectivePrice)}</span>
               {product.onSale && (
-                <span className="product-price-old">{formatPrice(product.price)}</span>
+                <>
+                  <span className="product-price-old">{formatPrice(product.price)}</span>
+                  {product.discountPercent > 0 && (
+                    <span className="badge-sale large">חיסכון {product.discountPercent}%</span>
+                  )}
+                </>
               )}
             </div>
+            {product.onSale && (
+              <p className="savings-line">
+                אתה חוסך {formatPrice(product.price - product.effectivePrice)}!
+              </p>
+            )}
             <p className="product-desc">{product.description}</p>
             <p className={`stock-info ${outOfStock ? 'out' : product.stock < 5 ? 'low' : ''}`}>
               {outOfStock ? 'אזל מהמלאי' : `במלאי: ${product.stock} יחידות`}
@@ -160,7 +170,7 @@ export default function ProductDetail() {
                     onChange={(e) => setQuantity(Number(e.target.value))}
                   />
                 </label>
-                <button className="btn btn-primary btn-lg" onClick={handleAdd}>
+                <button type="button" className="btn btn-primary btn-lg" onClick={handleAdd}>
                   הוסף לסל
                 </button>
                 <button

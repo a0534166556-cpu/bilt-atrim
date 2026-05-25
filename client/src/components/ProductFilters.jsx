@@ -36,6 +36,7 @@ export default function ProductFilters({ categories }) {
           <option value="price-desc">מחיר: גבוה לנמוך</option>
           <option value="name">שם</option>
           <option value="newest">חדשים</option>
+          <option value="discount">הנחה גבוהה</option>
         </select>
       </label>
       <label>

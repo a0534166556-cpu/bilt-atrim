@@ -36,7 +36,7 @@ export default function Home() {
           <p>{store?.tagline || 'החנות שלך – קנה בקלות, מכור בגוגל'}</p>
           <div className="hero-actions">
             <Link to="/products" className="btn btn-primary btn-lg">קנה עכשיו</Link>
-            <Link to="/admin/products/new" className="btn btn-secondary btn-lg">הוסף מוצר</Link>
+            <Link to="/sales" className="btn btn-secondary btn-lg">מבצעים 🔥</Link>
           </div>
         </div>
       </section>
@@ -61,6 +61,23 @@ export default function Home() {
               </Link>
             ))}
           </div>
+        </div>
+      </section>
+
+      <section className="section deals-strip">
+        <div className="container">
+          <div className="section-header">
+            <h2 className="section-title">🔥 מבצעים חמים</h2>
+            <Link to="/sales">כל המבצעים →</Link>
+          </div>
+          <div className="products-grid">
+            {featured.filter((p) => p.onSale).slice(0, 4).map((p) => (
+              <ProductCard key={p.id} product={p} />
+            ))}
+          </div>
+          {featured.filter((p) => p.onSale).length === 0 && (
+            <p className="empty-inline">אין מבצעים כרגע – <Link to="/products">לכל המוצרים</Link></p>
+          )}
         </div>
       </section>
 

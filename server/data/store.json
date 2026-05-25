@@ -6,5 +6,9 @@
   "whatsapp": "972501234567",
   "address": "ישראל",
   "shippingInfo": "משלוח חינם בהזמנה מעל 300 ₪ | 5-8 ימי עסקים",
-  "freeShippingMin": 300
+  "freeShippingMin": 300,
+  "promoActive": true,
+  "promoTitle": "מבצע השבוע!",
+  "promoText": "הנחות על מוצרים נבחרים – מוגבל בזמן",
+  "promoLink": "/sales"
 }

@@ -11,6 +11,7 @@ import {
   formatPrice,
 } from '../api';
 import { useToast } from '../context/ToastContext';
+import FreeShippingBar from '../components/FreeShippingBar';
 
 export default function Checkout() {
   const { items, total, clearCart } = useCart();
@@ -196,6 +197,7 @@ export default function Checkout() {
           </form>
           <aside className="checkout-summary">
             <h2>סיכום</h2>
+            <FreeShippingBar subtotal={afterDiscount} />
             <ul>
               {items.map((i) => (
                 <li key={i.id}>

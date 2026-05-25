@@ -124,7 +124,11 @@ export async function initDb() {
       whatsapp VARCHAR(30),
       address VARCHAR(255),
       shipping_info TEXT,
-      free_shipping_min DECIMAL(10,2) DEFAULT 300
+      free_shipping_min DECIMAL(10,2) DEFAULT 300,
+      promo_active TINYINT(1) DEFAULT 0,
+      promo_title VARCHAR(120) DEFAULT '',
+      promo_text VARCHAR(255) DEFAULT '',
+      promo_link VARCHAR(255) DEFAULT '/sales'
     )`,
     `CREATE TABLE IF NOT EXISTS admin_sessions (
       token VARCHAR(64) PRIMARY KEY,
@@ -137,10 +141,27 @@ export async function initDb() {
   }
 
   await migrateOrderPaymentColumns();
+  await migrateStorePromoColumns();
 
   const [[{ c }]] = await pool.query('SELECT COUNT(*) AS c FROM products');
   if (c === 0) await seedFromJson();
   else await ensureStore();
+}
+
+async function migrateStorePromoColumns() {
+  const cols = [
+    ['promo_active', 'TINYINT(1) DEFAULT 0'],
+    ['promo_title', "VARCHAR(120) DEFAULT ''"],
+    ['promo_text', "VARCHAR(255) DEFAULT ''"],
+    ['promo_link', "VARCHAR(255) DEFAULT '/sales'"],
+  ];
+  for (const [name, def] of cols) {
+    try {
+      await pool.query(`ALTER TABLE store ADD COLUMN ${name} ${def}`);
+    } catch (e) {
+      if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+    }
+  }
 }
 
 async function migrateOrderPaymentColumns() {
@@ -278,6 +299,10 @@ export async function getStore() {
     address: row.address,
     shippingInfo: row.shipping_info,
     freeShippingMin: Number(row.free_shipping_min),
+    promoActive: !!row.promo_active,
+    promoTitle: row.promo_title || '',
+    promoText: row.promo_text || '',
+    promoLink: row.promo_link || '/sales',
   };
 }
 
@@ -285,7 +310,8 @@ export async function updateStore(data) {
   const current = await getStore();
   const s = { ...current, ...data };
   await pool.query(
-    `UPDATE store SET name=?, tagline=?, email=?, phone=?, whatsapp=?, address=?, shipping_info=?, free_shipping_min=? WHERE id=1`,
+    `UPDATE store SET name=?, tagline=?, email=?, phone=?, whatsapp=?, address=?, shipping_info=?, free_shipping_min=?,
+     promo_active=?, promo_title=?, promo_text=?, promo_link=? WHERE id=1`,
     [
       s.name,
       s.tagline,
@@ -295,6 +321,10 @@ export async function updateStore(data) {
       s.address,
       s.shippingInfo,
       s.freeShippingMin ?? 300,
+      s.promoActive ? 1 : 0,
+      s.promoTitle || '',
+      s.promoText || '',
+      s.promoLink || '/sales',
     ]
   );
   return getStore();
@@ -714,11 +744,15 @@ export async function getAdminStats() {
   const [[revenue]] = await pool.query(
     "SELECT COALESCE(SUM(total),0) AS r FROM orders WHERE status NOT IN ('cancelled', 'awaiting_payment')"
   );
+  const [[onSale]] = await pool.query(
+    'SELECT COUNT(*) AS c FROM products WHERE active = 1 AND sale_price IS NOT NULL AND sale_price < price'
+  );
   const orders = await getAllOrders();
   return {
     totalProducts: products.total,
     activeProducts: active.c,
     lowStock: lowStock.c,
+    onSaleProducts: onSale.c,
     totalOrders: totalOrders.c,
     pendingOrders: pending.c,
     revenue: Number(revenue.r),

@@ -39,6 +39,10 @@ export default function AdminDashboard() {
           <span className="stat-value">{formatPrice(stats.revenue)}</span>
           <span className="stat-label">הכנסות</span>
         </div>
+        <div className="stat-card">
+          <span className="stat-value">{stats.onSaleProducts ?? 0}</span>
+          <span className="stat-label">במבצע</span>
+        </div>
       </div>
 
       <div className="admin-section">
@@ -77,6 +81,8 @@ export default function AdminDashboard() {
       <div className="admin-quick-actions">
         <Link to="/admin/products/new" className="btn btn-primary">+ הוסף מוצר חדש</Link>
         <Link to="/admin/products" className="btn btn-outline">נהל מוצרים</Link>
+        <Link to="/admin/coupons" className="btn btn-outline">קופונים</Link>
+        <Link to="/admin/settings" className="btn btn-outline">באנר מבצעים</Link>
       </div>
     </AdminLayout>
   );

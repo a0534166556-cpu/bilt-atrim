@@ -1243,3 +1243,99 @@ img {
   .admin-sidebar { flex-direction: row; flex-wrap: wrap; }
   .admin-form .form-grid { grid-template-columns: 1fr; }
 }
+
+/* Promo banner */
+.promo-banner {
+  background: linear-gradient(90deg, #ea4335, #f9ab00);
+  color: #fff;
+}
+.promo-banner-inner { padding: 0.65rem 0; }
+.promo-banner-link {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  flex-wrap: wrap;
+  color: inherit;
+  text-decoration: none;
+  font-size: 0.95rem;
+}
+.promo-banner-link:hover { opacity: 0.95; }
+.promo-banner-text { opacity: 0.95; }
+.promo-banner-cta { font-weight: 700; text-decoration: underline; }
+
+.nav-sale { color: #ea4335 !important; font-weight: 600; }
+
+/* Free shipping progress */
+.free-shipping-bar {
+  background: #e8f5e9;
+  border-radius: 8px;
+  padding: 0.75rem;
+  margin-bottom: 1rem;
+}
+.free-shipping-bar p { margin: 0 0 0.5rem; font-size: 0.9rem; font-weight: 500; }
+.free-shipping-bar--done { background: #e8f0fe; }
+.free-shipping-track {
+  height: 6px;
+  background: #c8e6c9;
+  border-radius: 3px;
+  overflow: hidden;
+}
+.free-shipping-fill {
+  height: 100%;
+  background: var(--secondary);
+  border-radius: 3px;
+  transition: width 0.3s ease;
+}
+
+/* Pagination */
+.pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 1rem;
+  margin-top: 2rem;
+}
+.pagination-info { font-weight: 500; color: var(--text-muted); }
+
+/* Sales & info pages */
+.sales-hero, .page-hero {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding: 2rem;
+  background: linear-gradient(135deg, #e8f0fe, #fce8e6);
+  border-radius: var(--radius);
+}
+.sales-hero h1 { margin-bottom: 0.5rem; }
+.info-page .info-card {
+  background: var(--surface);
+  padding: 1.5rem;
+  border-radius: var(--radius);
+  box-shadow: var(--shadow);
+  max-width: 640px;
+}
+.info-page .info-card ul { margin: 1rem 0; padding-right: 1.25rem; }
+.info-page .info-card li { margin-bottom: 0.5rem; }
+
+.savings-line {
+  color: #137333;
+  font-weight: 600;
+  margin: 0.5rem 0 1rem;
+}
+
+.deals-strip { background: #fff8e1; }
+.empty-inline { text-align: center; color: var(--text-muted); }
+
+.form-section-title {
+  margin: 2rem 0 1rem;
+  font-size: 1.15rem;
+  border-bottom: 1px solid var(--border);
+  padding-bottom: 0.5rem;
+}
+.checkbox-label {
+  display: flex !important;
+  align-items: center;
+  gap: 0.5rem;
+  font-weight: 600;
+}
+.checkbox-label input { width: auto; margin: 0; }

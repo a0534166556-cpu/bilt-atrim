@@ -90,20 +90,28 @@ function enrichProduct(p, reviews) {
     productReviews.length > 0
       ? productReviews.reduce((s, r) => s + r.rating, 0) / productReviews.length
       : 0;
+  const onSale = !!(p.salePrice && p.salePrice < p.price);
+  const discountPercent = onSale
+    ? Math.round((1 - p.salePrice / p.price) * 100)
+    : 0;
   return {
     ...p,
     effectivePrice: getEffectivePrice(p),
-    onSale: !!(p.salePrice && p.salePrice < p.price),
+    onSale,
+    discountPercent,
     reviewCount: productReviews.length,
     averageRating: Math.round(avg * 10) / 10,
   };
 }
 
 function filterPublicProducts(products, query = {}) {
-  const { category, q, sort, minPrice, maxPrice, featured } = query;
+  const { category, q, sort, minPrice, maxPrice, featured, onSale } = query;
   let list = products.filter((p) => p.active !== false);
   if (category) list = list.filter((p) => p.category === category);
   if (featured === 'true') list = list.filter((p) => p.featured);
+  if (onSale === 'true') {
+    list = list.filter((p) => p.salePrice && p.salePrice < p.price);
+  }
   if (q) {
     const term = q.toLowerCase();
     list = list.filter(
@@ -128,6 +136,13 @@ function filterPublicProducts(products, query = {}) {
       break;
     case 'newest':
       list.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+      break;
+    case 'discount':
+      list.sort((a, b) => {
+        const da = a.salePrice && a.salePrice < a.price ? 1 - a.salePrice / a.price : 0;
+        const db = b.salePrice && b.salePrice < b.price ? 1 - b.salePrice / b.price : 0;
+        return db - da;
+      });
       break;
     default:
       list.sort((a, b) => (b.featured ? 1 : 0) - (a.featured ? 1 : 0));

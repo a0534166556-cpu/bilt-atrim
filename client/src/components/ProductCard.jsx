@@ -25,7 +25,11 @@ export default function ProductCard({ product }) {
   return (
     <article className={`product-card ${outOfStock ? 'out-of-stock' : ''}`}>
       <div className="product-card-badges">
-        {product.onSale && <span className="badge-sale">מבצע</span>}
+        {product.onSale && (
+          <span className="badge-sale">
+            {product.discountPercent > 0 ? `-${product.discountPercent}%` : 'מבצע'}
+          </span>
+        )}
         {product.featured && <span className="badge-featured">מומלץ</span>}
         {outOfStock && <span className="badge-out">אזל מהמלאי</span>}
         {product.stock > 0 && product.stock < 5 && (

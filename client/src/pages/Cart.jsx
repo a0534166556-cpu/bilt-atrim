@@ -3,6 +3,7 @@ import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useCart } from '../context/CartContext';
 import { fetchProducts, formatPrice } from '../api';
+import FreeShippingBar from '../components/FreeShippingBar';
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, total, syncWithCatalog } = useCart();
@@ -113,6 +114,7 @@ export default function Cart() {
 
           <aside className="cart-summary">
             <h2>סיכום הזמנה</h2>
+            <FreeShippingBar subtotal={total} />
             <div className="summary-row">
               <span>פריטים ({items.reduce((s, i) => s + i.quantity, 0)})</span>
               <span>{formatPrice(total)}</span>

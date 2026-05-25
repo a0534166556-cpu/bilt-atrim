@@ -11,6 +11,9 @@ import OrderSuccess from './pages/OrderSuccess';
 import Wishlist from './pages/Wishlist';
 import TrackOrder from './pages/TrackOrder';
 import Contact from './pages/Contact';
+import Sales from './pages/Sales';
+import ShippingInfo from './pages/ShippingInfo';
+import ReturnsPolicy from './pages/ReturnsPolicy';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminProducts from './pages/admin/AdminProducts';
@@ -26,6 +29,7 @@ export default function App() {
       <Routes>
         <Route path="/" element={<Home />} />
         <Route path="/products" element={<Products />} />
+        <Route path="/sales" element={<Sales />} />
         <Route path="/category/:id" element={<Category />} />
         <Route path="/product/:id" element={<ProductDetail />} />
         <Route path="/cart" element={<Cart />} />
@@ -34,6 +38,8 @@ export default function App() {
         <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/track-order" element={<TrackOrder />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/shipping" element={<ShippingInfo />} />
+        <Route path="/returns" element={<ReturnsPolicy />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
         <Route
