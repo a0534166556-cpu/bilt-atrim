@@ -206,6 +206,10 @@ export async function adminCjRecalculatePrices(markupPercent = 30) {
   });
 }
 
+export async function adminCjRetranslateDescriptions() {
+  return request(`${API}/admin/cj/retranslate-descriptions`, { method: 'POST' });
+}
+
 export async function adminTranslateProduct(id) {
   return request(`${API}/admin/products/${id}/translate`, { method: 'POST' });
 }

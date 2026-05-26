@@ -55,6 +55,7 @@ import {
   recalculateAllCjPrices,
   recalculateStaleCjPrices,
   refreshStaleCjVideos,
+  getCjProductDetail,
 } from './cj.js';
 import {
   getPaymentConfig,
@@ -639,6 +640,46 @@ app.get(
     const { page = '1', size = '50' } = req.query;
     const result = await getMyCjProducts(Number(page) || 1, Number(size) || 50);
     res.json(result);
+  })
+);
+
+app.post(
+  '/api/admin/cj/retranslate-descriptions',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { needsDescriptionRetranslation } = await import('./descriptionFormat.js');
+    const products = (await getAllProducts()).filter((p) => p.cjPid);
+    const results = [];
+    for (const p of products) {
+      if (!needsDescriptionRetranslation(p.description) && !needsTranslation(p.description)) {
+        results.push({ id: p.id, status: 'skipped' });
+        continue;
+      }
+      try {
+        const detail = await getCjProductDetail(p.cjPid);
+        const translated = await translateProductFields({
+          name: p.name,
+          description: detail.description,
+        });
+        await updateProduct(p.id, {
+          name: translated.name,
+          description: translated.description,
+        });
+        results.push({ id: p.id, status: 'ok' });
+        await new Promise((r) => setTimeout(r, 600));
+      } catch (err) {
+        results.push({ id: p.id, status: 'error', error: err.message });
+      }
+    }
+    res.json({
+      updated: results.filter((r) => r.status === 'ok').length,
+      skipped: results.filter((r) => r.status === 'skipped').length,
+      failed: results.filter((r) => r.status === 'error').length,
+      details: results,
+    });
   })
 );
 

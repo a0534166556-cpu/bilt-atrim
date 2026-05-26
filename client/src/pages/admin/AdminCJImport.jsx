@@ -7,6 +7,7 @@ import {
   adminCjMyProducts,
   adminCjSyncMy,
   adminCjRecalculatePrices,
+  adminCjRetranslateDescriptions,
   fetchCategories,
   formatPrice,
 } from '../../api';
@@ -27,6 +28,7 @@ export default function AdminCJImport() {
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
   const [recalcPrices, setRecalcPrices] = useState(false);
+  const [retranslateDesc, setRetranslateDesc] = useState(false);
   const [translateToHebrew, setTranslateToHebrew] = useState(true);
 
   useEffect(() => {
@@ -47,6 +49,18 @@ export default function AdminCJImport() {
       setMyProducts([]);
     } finally {
       setLoadingMy(false);
+    }
+  };
+
+  const fixDescriptions = async () => {
+    setRetranslateDesc(true);
+    try {
+      const data = await adminCjRetranslateDescriptions();
+      showToast(`תוקנו ${data.updated} תיאורים בעברית (${data.skipped} דולגו)`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setRetranslateDesc(false);
     }
   };
 
@@ -204,6 +218,14 @@ export default function AdminCJImport() {
                 onClick={fixPrices}
               >
                 {recalcPrices ? 'מחשב מחירים...' : 'עדכן מחירים לשקלים'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={retranslateDesc}
+                onClick={fixDescriptions}
+              >
+                {retranslateDesc ? 'מתקן תיאורים...' : 'תקן תיאורים בעברית'}
               </button>
               <button
                 type="button"

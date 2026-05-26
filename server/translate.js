@@ -93,9 +93,10 @@ export async function translateToEnglish(text) {
 }
 
 export async function translateProductFields({ name, description }) {
+  const { translateProductDescription } = await import('./descriptionFormat.js');
   const [translatedName, translatedDesc] = await Promise.all([
     name ? translateToHebrew(name) : Promise.resolve(name),
-    description ? translateToHebrew(description) : Promise.resolve(description),
+    description ? translateProductDescription(description) : Promise.resolve(description),
   ]);
   return {
     name: translatedName || name,
@@ -116,12 +117,13 @@ export async function translateProductFieldsToEnglish({ name, description }) {
 
 /** מוצרים באנגלית במסד → עברית (ייבוא ישן) */
 export async function translateEnglishProductsInDb({ getAllProducts, updateProduct }) {
+  const { needsDescriptionRetranslation } = await import('./descriptionFormat.js');
   const products = await getAllProducts();
   const results = [];
 
   for (const p of products) {
     const nameNeeds = needsTranslation(p.name);
-    const descNeeds = needsTranslation(p.description);
+    const descNeeds = needsTranslation(p.description) || needsDescriptionRetranslation(p.description);
     if (!nameNeeds && !descNeeds) continue;
 
     try {

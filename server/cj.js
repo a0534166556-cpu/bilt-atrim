@@ -1,4 +1,5 @@
 import { translateProductFields } from './translate.js';
+import { pickCjDescription } from './descriptionFormat.js';
 import {
   calculateRetailPriceIls,
   extractShippingUsd,
@@ -364,18 +365,13 @@ export async function getCjProductDetail(pid) {
   const stock =
     variants.reduce((sum, v) => sum + (Number(v.inventory ?? v.stock) || 0), 0) || 99;
 
-  const desc =
-    p.descriptionEn ||
-    p.description ||
-    p.productDescription ||
-    p.productNameEn ||
-  '';
+  const desc = pickCjDescription(p);
 
   return {
     pid: p.pid || p.productId || pid,
     sku: p.productSku || p.sku || `CJ-${pid}`,
     name: pickName(p),
-    description: String(desc).slice(0, 8000),
+    description: String(desc).slice(0, 12000),
     image: images[0] || '',
     images,
     videos,

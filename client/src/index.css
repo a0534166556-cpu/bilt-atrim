@@ -519,6 +519,25 @@ img {
   margin: 0.5rem 0;
 }
 
+.product-desc-html h3 {
+  font-size: 1.1rem;
+  margin: 1.25rem 0 0.5rem;
+  color: var(--text);
+}
+
+.product-desc-html ul {
+  margin: 0.5rem 0 1rem;
+  padding-right: 1.25rem;
+}
+
+.product-desc-html li {
+  margin-bottom: 0.5rem;
+}
+
+.product-desc-html .desc-spec {
+  margin: 0.35rem 0;
+}
+
 .product-desc-html b,
 .product-desc-html strong {
   color: var(--text);
