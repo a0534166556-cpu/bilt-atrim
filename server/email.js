@@ -1,14 +1,21 @@
 /**
- * שליחת מיילים דרך Resend (https://resend.com)
- * Railway: RESEND_API_KEY, EMAIL_FROM, SITE_URL
+ * שליחת מיילים – SendGrid או Resend
+ * Railway: SENDGRID_API_KEY (מומלץ) או RESEND_API_KEY, EMAIL_FROM, SITE_URL
  */
 
 import { getOrderById, getStore } from './db.js';
 
 const RESEND_API = 'https://api.resend.com/emails';
+const SENDGRID_API = 'https://api.sendgrid.com/v3/mail/send';
 
 export function isEmailConfigured() {
-  return Boolean(process.env.RESEND_API_KEY?.trim());
+  return Boolean(
+    process.env.SENDGRID_API_KEY?.trim() || process.env.RESEND_API_KEY?.trim()
+  );
+}
+
+function useSendGrid() {
+  return Boolean(process.env.SENDGRID_API_KEY?.trim());
 }
 
 function formatIls(amount) {
@@ -21,11 +28,17 @@ function formatIls(amount) {
   }).format(n);
 }
 
-function getFromAddress(store) {
-  const from = process.env.EMAIL_FROM?.trim() || store?.email?.trim();
+function getFromParts(store) {
+  const email = process.env.EMAIL_FROM?.trim() || store?.email?.trim();
   const name = process.env.EMAIL_FROM_NAME?.trim() || store?.name || 'החנות';
-  if (!from) return null;
-  return `${name} <${from}>`;
+  return { email, name };
+}
+
+/** פורמט Resend: "Name <email>" */
+function getFromAddress(store) {
+  const { email, name } = getFromParts(store);
+  if (!email) return null;
+  return `${name} <${email}>`;
 }
 
 function siteUrl() {
@@ -83,13 +96,31 @@ function orderEmailHtml({ order, store, title, intro }) {
 </html>`;
 }
 
-async function sendEmail({ from, to, subject, html }) {
-  const apiKey = process.env.RESEND_API_KEY?.trim();
-  if (!apiKey) {
-    console.warn('RESEND_API_KEY לא מוגדר – מייל לא נשלח');
-    return { ok: false, skipped: true };
+async function sendViaSendGrid({ fromEmail, fromName, to, subject, html }) {
+  const apiKey = process.env.SENDGRID_API_KEY?.trim();
+  const res = await fetch(SENDGRID_API, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${apiKey}`,
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify({
+      personalizations: [{ to: [{ email: to }] }],
+      from: { email: fromEmail, name: fromName },
+      subject,
+      content: [{ type: 'text/html', value: html }],
+    }),
+  });
+  if (!res.ok) {
+    const data = await res.json().catch(() => ({}));
+    const msg = data?.errors?.[0]?.message || `שגיאת SendGrid (${res.status})`;
+    throw new Error(msg);
   }
+  return { ok: true };
+}
 
+async function sendViaResend({ from, to, subject, html }) {
+  const apiKey = process.env.RESEND_API_KEY?.trim();
   const res = await fetch(RESEND_API, {
     method: 'POST',
     headers: {
@@ -98,22 +129,35 @@ async function sendEmail({ from, to, subject, html }) {
     },
     body: JSON.stringify({ from, to: [to], subject, html }),
   });
-
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
-    throw new Error(data.message || data.error || `שגיאת מייל (${res.status})`);
+    throw new Error(data.message || data.error || `שגיאת Resend (${res.status})`);
   }
   return { ok: true, id: data.id };
 }
 
-export async function sendOrderConfirmationEmail(order, store) {
-  if (!order?.email) return { ok: false, skipped: true };
-
-  const from = getFromAddress(store);
-  if (!from) {
-    console.warn('EMAIL_FROM לא מוגדר – הוסף ב-Railway או בהגדרות החנות');
+async function sendEmail({ to, subject, html, store }) {
+  if (!isEmailConfigured()) {
+    console.warn('SENDGRID_API_KEY או RESEND_API_KEY לא מוגדר');
     return { ok: false, skipped: true };
   }
+
+  const { email: fromEmail, name: fromName } = getFromParts(store);
+  if (!fromEmail) {
+    console.warn('EMAIL_FROM לא מוגדר – הוסף ב-Railway');
+    return { ok: false, skipped: true };
+  }
+
+  if (useSendGrid()) {
+    return sendViaSendGrid({ fromEmail, fromName, to, subject, html });
+  }
+
+  const from = getFromAddress(store);
+  return sendViaResend({ from, to, subject, html });
+}
+
+export async function sendOrderConfirmationEmail(order, store) {
+  if (!order?.email) return { ok: false, skipped: true };
 
   const paymentLabel =
     order.paymentMethod === 'stripe' ? 'כרטיס אשראי (שולם)' : 'תשלום במזומן/העברה';
@@ -127,10 +171,10 @@ export async function sendOrderConfirmationEmail(order, store) {
 
   try {
     return await sendEmail({
-      from,
       to: order.email,
       subject: `אישור הזמנה #${order.id} – ${store?.name || 'החנות'}`,
       html,
+      store,
     });
   } catch (err) {
     console.error('Order confirmation email failed:', err.message);
@@ -141,9 +185,6 @@ export async function sendOrderConfirmationEmail(order, store) {
 export async function sendOrderShippedEmail(order, store) {
   if (!order?.email || !order.trackingNumber) return { ok: false, skipped: true };
 
-  const from = getFromAddress(store);
-  if (!from) return { ok: false, skipped: true };
-
   const html = orderEmailHtml({
     order,
     store,
@@ -153,10 +194,10 @@ export async function sendOrderShippedEmail(order, store) {
 
   try {
     return await sendEmail({
-      from,
       to: order.email,
       subject: `ההזמנה #${order.id} נשלחה – ${store?.name || 'החנות'}`,
       html,
+      store,
     });
   } catch (err) {
     console.error('Shipped email failed:', err.message);
@@ -164,7 +205,6 @@ export async function sendOrderShippedEmail(order, store) {
   }
 }
 
-/** שליחה אחרי הזמנה חדשה (לא חוסם את התשובה ללקוח) */
 export async function notifyOrderConfirmation(orderId) {
   if (!isEmailConfigured()) return;
   try {

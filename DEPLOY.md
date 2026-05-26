@@ -23,18 +23,20 @@ Railway יוסיף אוטומטית:
 | `STRIPE_SECRET_KEY` | מפתח סודי מ-[Stripe Dashboard](https://dashboard.stripe.com/apikeys) |
 | `STRIPE_WEBHOOK_SECRET` | מ-Webhook (ראה למטה) |
 | `CJ_ACCESS_TOKEN` | מפתח API מ-CJ (פורמט `CJxxx@api@...`) – השרת ממיר אוטומטית ל-access token |
-| `RESEND_API_KEY` | מפתח API מ-[Resend](https://resend.com/api-keys) (מיילים ללקוחות) |
-| `EMAIL_FROM` | כתובת שולח מאומתת ב-Resend, למשל `orders@yourdomain.com` |
+| `SENDGRID_API_KEY` | מפתח מ-[SendGrid](https://app.sendgrid.com/settings/api_keys) (מיילים) |
+| `RESEND_API_KEY` | חלופה ל-Resend אם אין SendGrid |
+| `EMAIL_FROM` | כתובת שולח **מאומתת** ב-SendGrid (חובה!) |
+| `EMAIL_FROM_NAME` | שם השולח, למשל `NovaShop` |
 
 **אל תגדיר ידנית** את MYSQL* – Railway מחבר אותם מה-Database.
 
-## מיילים ללקוחות (Resend)
+## מיילים ללקוחות (SendGrid)
 
-1. צור חשבון ב-[resend.com](https://resend.com)
-2. **API Keys** → העתק מפתח ל-`RESEND_API_KEY` ב-Railway
-3. **Domains** → אמת דומיין (או לבדיקות: `onboarding@resend.dev` כ-`EMAIL_FROM`)
-4. Redeploy – אחרי הזמנה הלקוח מקבל מייל עם מספר הזמנה
-5. בדוק: `https://.../api/health` → `"email": true`
+1. [SendGrid](https://app.sendgrid.com) → **Settings → API Keys** → Create
+2. ב-Railway הוסף `SENDGRID_API_KEY` (לא בקוד!)
+3. **Settings → Sender Authentication** → אמת אימייל או דומיין
+4. `EMAIL_FROM` = אותה כתובת מאומתת (למשל `support@yourdomain.com`)
+5. Redeploy – בדוק: `/api/health` → `"email": true`
 
 ## תרגום מוצרים לעברית
 
