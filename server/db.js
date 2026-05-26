@@ -559,7 +559,7 @@ export async function updateProduct(id, body) {
           : [];
   const mainImage = images[0] || (body.image ?? existing.image);
   await pool.query(
-    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=?, images=?, video_url=? WHERE id=?`,
+    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=?, images=?, video_url=?, videos=? WHERE id=?`,
     [
       body.sku ?? existing.sku,
       body.name ?? existing.name,

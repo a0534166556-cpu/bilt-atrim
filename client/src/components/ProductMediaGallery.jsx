@@ -1,5 +1,10 @@
 import { useMemo, useState } from 'react';
 
+function videoMimeType(url) {
+  if (/\.webm(\?|$)/i.test(url)) return 'video/webm';
+  return 'video/mp4';
+}
+
 export default function ProductMediaGallery({ images = [], videos = [], productName = '' }) {
   const media = useMemo(() => {
     const items = [];
@@ -26,6 +31,7 @@ export default function ProductMediaGallery({ images = [], videos = [], productN
   }, [images, videos]);
 
   const [active, setActive] = useState(0);
+  const [videoError, setVideoError] = useState(false);
 
   if (!media.length) {
     return <div className="product-no-img large">📦</div>;
@@ -55,15 +61,27 @@ export default function ProductMediaGallery({ images = [], videos = [], productN
 
       <div className="product-media-main">
         {current.type === 'video' ? (
-          <video
-            key={current.url}
-            src={current.url}
-            poster={poster}
-            controls
-            playsInline
-            preload="metadata"
-            className="product-gallery-main"
-          />
+          videoError ? (
+            <div className="product-video-fallback">
+              <p>לא ניתן לטעון את הסרטון בדפדפן.</p>
+              <a href={current.url} target="_blank" rel="noopener noreferrer" className="btn btn-outline btn-sm">
+                פתח סרטון בחלון חדש
+              </a>
+            </div>
+          ) : (
+            <video
+              key={current.url}
+              src={current.url}
+              poster={poster}
+              controls
+              playsInline
+              preload="metadata"
+              className="product-gallery-main"
+              onError={() => setVideoError(true)}
+            >
+              <source src={current.url} type={videoMimeType(current.url)} />
+            </video>
+          )
         ) : (
           <img
             src={current.url}

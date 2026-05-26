@@ -54,6 +54,7 @@ import {
   syncMyCjProductsToStore,
   recalculateAllCjPrices,
   recalculateStaleCjPrices,
+  refreshStaleCjVideos,
 } from './cj.js';
 import {
   getPaymentConfig,
@@ -62,6 +63,7 @@ import {
   handleStripeWebhook,
   isStripeEnabled,
 } from './payments.js';
+import { mapProductMediaForClient, streamCjVideo } from './media.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PORT = process.env.PORT || 3001;
@@ -113,15 +115,17 @@ function enrichProduct(p, reviews) {
   const discountPercent = onSale
     ? Math.round((1 - p.salePrice / p.price) * 100)
     : 0;
-  return {
+  return mapProductMediaForClient({
     ...p,
     effectivePrice: getEffectivePrice(p),
     onSale,
     discountPercent,
     reviewCount: productReviews.length,
     averageRating: Math.round(avg * 10) / 10,
-  };
+  });
 }
+
+app.get('/api/media/cj-video', asyncHandler(streamCjVideo));
 
 function filterPublicProducts(products, query = {}) {
   const { category, q, sort, minPrice, maxPrice, featured, onSale } = query;
@@ -815,6 +819,14 @@ async function start() {
         if (ok.length) console.log(`תורגמו ${ok.length} מוצרים מאנגלית לעברית במסד`);
       })
       .catch((err) => console.warn('Product Hebrew migration:', err.message));
+    if (isCjConfigured()) {
+      refreshStaleCjVideos()
+        .then((rows) => {
+          const ok = rows.filter((r) => r.status === 'ok');
+          if (ok.length) console.log(`CJ: עודכנו סרטונים ל-${ok.length} מוצרים`);
+        })
+        .catch((err) => console.warn('CJ video refresh:', err.message));
+    }
   });
 }
 

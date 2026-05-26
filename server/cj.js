@@ -193,13 +193,38 @@ function collectImages(p) {
   return urls.slice(0, 24);
 }
 
+function isDirectPlayableVideoUrl(url) {
+  const u = String(url).trim();
+  if (!/^https?:\/\//i.test(u)) return false;
+  if (u.includes('download-only-api.cjdropshipping.com')) return true;
+  if (/\.(mp4|webm|m3u8)(\?|$)/i.test(u)) return true;
+  if (u.includes('video-cf.cjdropshipping.com') && !/\.(mp4|webm)/i.test(u)) return false;
+  return /\.(mp4|webm)/i.test(u);
+}
+
 function videoEntry(url, poster = '') {
   const u = String(url).trim();
-  if (!/^https?:\/\//i.test(u)) return null;
+  if (!isDirectPlayableVideoUrl(u)) return null;
   return {
     url: u,
     poster: enhanceImageUrl(poster) || '',
   };
+}
+
+/** כתובות MP4 אמיתיות מ-CJ (דורש Referer בדפדפן – נשתמש בפרוקסי) */
+export async function fetchCjVideosByProductId(pid) {
+  const data = await cjRequest('/product/queryVideosByProductId', {
+    method: 'POST',
+    body: JSON.stringify({ productId: String(pid) }),
+  });
+  const list = Array.isArray(data.data) ? data.data : [];
+  return list
+    .filter((v) => v.videoUrl && (v.videoState === 'ON_STATE' || !v.videoState))
+    .map((v) =>
+      videoEntry(v.videoUrl, v.coverURL || v.coverUrl || '')
+    )
+    .filter(Boolean)
+    .slice(0, 10);
 }
 
 function collectVideos(p) {
@@ -225,8 +250,8 @@ function collectVideos(p) {
     if (!Array.isArray(arr)) continue;
     for (const v of arr) {
       if (typeof v === 'string') {
-        if (v.includes('.mp4') || v.includes('video')) add(v);
-        else add(`https://video-cf.cjdropshipping.com/${v}`, p.productImage);
+        if (v.startsWith('http')) add(v);
+        else if (/\.(mp4|webm)/i.test(v)) add(`https://video-cf.cjdropshipping.com/${v}`);
       } else if (v) {
         add(v.videoUrl || v.url || v.src, v.cover || v.poster || v.thumbnail || v.image);
       }
@@ -319,7 +344,20 @@ export async function getCjProductDetail(pid) {
   const p = data.data || {};
   const variants = p.variantList || p.variants || [];
   const images = collectImages(p);
-  const videos = collectVideos(p);
+  let videos = collectVideos(p);
+  try {
+    const fromApi = await fetchCjVideosByProductId(pid);
+    if (fromApi.length) {
+      const seen = new Set();
+      videos = [...fromApi, ...videos].filter((v) => {
+        if (!v?.url || seen.has(v.url)) return false;
+        seen.add(v.url);
+        return true;
+      }).slice(0, 10);
+    }
+  } catch (err) {
+    console.warn(`CJ videos ${pid}:`, err.message);
+  }
   const videoUrl = videos[0]?.url || '';
   const costUsd = extractCostUsd(p, variants);
   const shippingUsd = extractShippingUsd(p, variants);
@@ -416,6 +454,46 @@ export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = f
 
 export async function recalculateStaleCjPrices(markupPercent = 30) {
   return recalculateAllCjPrices(markupPercent, { onlyStale: true });
+}
+
+function hasBrokenVideoUrls(product) {
+  const urls = [
+    product.videoUrl,
+    ...(product.videos || []).map((v) => (typeof v === 'string' ? v : v?.url)),
+  ].filter(Boolean);
+  if (!urls.length) return true;
+  return urls.some(
+    (u) => u.includes('video-cf.cjdropshipping.com') && !/\.(mp4|webm)/i.test(u)
+  );
+}
+
+/** מעדכן סרטונים עם כתובות MP4 אמיתיות מ-CJ */
+export async function refreshStaleCjVideos() {
+  const { getAllProducts, updateProduct } = await import('./db.js');
+  const { isPlayableCjVideoUrl } = await import('./media.js');
+  const products = (await getAllProducts()).filter((p) => p.cjPid);
+  const results = [];
+
+  for (const p of products) {
+    if (!hasBrokenVideoUrls(p)) continue;
+    try {
+      const detail = await getCjProductDetail(p.cjPid);
+      const videos = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
+      if (!videos.length) {
+        results.push({ id: p.id, status: 'no-videos' });
+        continue;
+      }
+      await updateProduct(p.id, {
+        videoUrl: detail.videoUrl,
+        videos,
+      });
+      results.push({ id: p.id, status: 'ok', count: videos.length });
+      await new Promise((r) => setTimeout(r, 400));
+    } catch (err) {
+      results.push({ id: p.id, status: 'error', error: err.message });
+    }
+  }
+  return results;
 }
 
 export async function importCjProducts(
