@@ -281,8 +281,8 @@ export default function AdminCJImport() {
               <div className="cj-results-grid">
                 {results.map((p) => {
                   const usdToIls = 3.75;
-                  const shippingUsd = 4;
-                  const retail = Math.ceil((p.price + shippingUsd) * (1 + markup / 100) * usdToIls);
+                  const cost = Number(p.price) || 0;
+                  const retail = Math.max(5, Math.ceil(cost * (1 + markup / 100) * usdToIls));
                   return (
                     <label key={p.pid} className={`cj-result-card ${selected.has(p.pid) ? 'selected' : ''}`}>
                       <input
@@ -297,9 +297,10 @@ export default function AdminCJImport() {
                       )}
                       <h3>{p.name}</h3>
                       <p className="cj-prices">
-                        עלות CJ: ${p.price?.toFixed?.(2) ?? p.price} + משלוח
+                        עלות CJ: ${cost.toFixed(2)}
                         <br />
                         <strong>מחיר בחנות (₪): {formatPrice(retail)}</strong>
+                        <small> + משלוח לקוח בקופה ₪29</small>
                       </p>
                       <small>SKU: {p.sku || p.pid}</small>
                     </label>
