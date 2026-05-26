@@ -8,11 +8,9 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 let pool;
 
 function getConfig() {
-  if (process.env.MYSQL_URL) {
-    return { uri: process.env.MYSQL_URL, ssl: { rejectUnauthorized: false } };
-  }
-  if (process.env.DATABASE_URL) {
-    return { uri: process.env.DATABASE_URL, ssl: { rejectUnauthorized: false } };
+  const mysqlUri = process.env.MYSQL_URL || process.env.MYSQL_URI || process.env.DATABASE_URL;
+  if (mysqlUri) {
+    return { uri: mysqlUri, ssl: { rejectUnauthorized: false } };
   }
   return {
     host: process.env.MYSQLHOST || process.env.DB_HOST || 'localhost',

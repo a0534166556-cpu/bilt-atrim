@@ -630,7 +630,12 @@ if (fs.existsSync(clientDist)) {
 }
 
 async function start() {
-  if (!process.env.MYSQLHOST && !process.env.MYSQL_URL && !process.env.DATABASE_URL) {
+  if (
+    !process.env.MYSQLHOST &&
+    !process.env.MYSQL_URL &&
+    !process.env.MYSQL_URI &&
+    !process.env.DATABASE_URL
+  ) {
     console.error('ERROR: MySQL not configured. Add MySQL service on Railway and link variables.');
     process.exit(1);
   }
