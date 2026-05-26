@@ -199,6 +199,13 @@ export async function adminCjSyncMy({ markupPercent, categoryId, translateToHebr
   });
 }
 
+export async function adminCjRecalculatePrices(markupPercent = 30) {
+  return request(`${API}/admin/cj/recalculate-prices`, {
+    method: 'POST',
+    body: JSON.stringify({ markupPercent }),
+  });
+}
+
 export async function adminTranslateProduct(id) {
   return request(`${API}/admin/products/${id}/translate`, { method: 'POST' });
 }

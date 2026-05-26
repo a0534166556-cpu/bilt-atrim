@@ -344,9 +344,35 @@ export async function getCjProductDetail(pid) {
     videos,
     videoUrl,
     price: costUsd,
+    costUsd,
+    shippingUsd,
     stock: stock || 99,
     categoryName: p.categoryName || '',
   };
+}
+
+/** מעדכן מחירי מכירה בשקלים לכל המוצרים מ-CJ שכבר בחנות */
+export async function recalculateAllCjPrices(markupPercent = 30) {
+  const { getAllProducts, updateProduct } = await import('./db.js');
+  const products = await getAllProducts();
+  const cjProducts = products.filter((p) => p.cjPid);
+  const results = [];
+
+  for (const p of cjProducts) {
+    try {
+      const detail = await getCjProductDetail(p.cjPid);
+      const retail = calculateRetailPriceIls(detail.costUsd ?? detail.price, {
+        markupPercent,
+        shippingUsd: detail.shippingUsd,
+      });
+      await updateProduct(p.id, { price: retail });
+      results.push({ id: p.id, name: p.name, price: retail, costUsd: detail.costUsd });
+      await new Promise((r) => setTimeout(r, 300));
+    } catch (err) {
+      results.push({ id: p.id, error: err.message });
+    }
+  }
+  return results;
 }
 
 export async function importCjProducts(

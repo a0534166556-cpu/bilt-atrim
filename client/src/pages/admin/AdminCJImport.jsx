@@ -6,6 +6,7 @@ import {
   adminCjImport,
   adminCjMyProducts,
   adminCjSyncMy,
+  adminCjRecalculatePrices,
   fetchCategories,
   formatPrice,
 } from '../../api';
@@ -45,6 +46,18 @@ export default function AdminCJImport() {
       setMyProducts([]);
     } finally {
       setLoadingMy(false);
+    }
+  };
+
+  const fixPrices = async () => {
+    setRecalcPrices(true);
+    try {
+      const data = await adminCjRecalculatePrices(markup);
+      showToast(`עודכנו מחירים ל-${data.updated} מוצרים (₪ לפי דולר+משלוח+${markup}% רווח)`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setRecalcPrices(false);
     }
   };
 
@@ -182,6 +195,14 @@ export default function AdminCJImport() {
                 onClick={loadMyProducts}
               >
                 {loadingMy ? 'טוען...' : 'הצג מוצרים מ-CJ'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={recalcPrices}
+                onClick={fixPrices}
+              >
+                {recalcPrices ? 'מחשב מחירים...' : 'עדכן מחירים לשקלים'}
               </button>
               <button
                 type="button"
