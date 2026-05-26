@@ -128,7 +128,7 @@ export function CartProvider({ children }) {
             stock: product.stock,
             price,
             effectivePrice: price,
-            quantity: Math.min(item.quantity, product.stock),
+            quantity: Math.min(item.quantity, getProductStock(product)),
           })
         );
       }

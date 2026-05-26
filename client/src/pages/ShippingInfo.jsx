@@ -9,7 +9,7 @@ export default function ShippingInfo() {
 
   return (
     <div className="container page info-page">
-      <Helmet><title>משלוחים | {store?.name || 'החנות'}</title></Helmet>
+      <Helmet><title>{`משלוחים | ${store?.name || 'החנות'}`}</title></Helmet>
       <h1>משלוחים</h1>
       <div className="info-card">
         <p>{store?.shippingInfo || 'משלוח לכל הארץ'}</p>

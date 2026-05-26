@@ -26,7 +26,7 @@ export default function Home() {
   return (
     <>
       <Helmet>
-        <title>{name} | חנות מקוונת</title>
+        <title>{`${name} | חנות מקוונת`}</title>
         <meta name="description" content={store?.tagline || 'חנות מקוונת למכירת מוצרים'} />
       </Helmet>
 

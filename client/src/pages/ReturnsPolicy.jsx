@@ -7,7 +7,7 @@ export default function ReturnsPolicy() {
 
   return (
     <div className="container page info-page">
-      <Helmet><title>החזרות והחלפות | {store?.name || 'החנות'}</title></Helmet>
+      <Helmet><title>{`החזרות והחלפות | ${store?.name || 'החנות'}`}</title></Helmet>
       <h1>החזרות והחלפות</h1>
       <div className="info-card">
         <ul>

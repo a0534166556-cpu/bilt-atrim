@@ -34,7 +34,7 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="container page empty-cart">
-        <Helmet><title>סל קניות | מרקט גוגל</title></Helmet>
+        <Helmet><title>{'סל קניות | מרקט גוגל'}</title></Helmet>
         <h1>הסל ריק</h1>
         <p>עדיין לא הוספת מוצרים</p>
         <Link to="/products" className="btn btn-primary">המשך קניות</Link>
@@ -46,7 +46,7 @@ export default function Cart() {
 
   return (
     <>
-      <Helmet><title>סל קניות ({itemCount}) | מרקט גוגל</title></Helmet>
+      <Helmet><title>{`סל קניות (${itemCount}) | מרקט גוגל`}</title></Helmet>
       <div className="container page cart-page">
         <h1>סל קניות</h1>
         {syncing && <p className="loading-inline">מעדכן מחירים...</p>}

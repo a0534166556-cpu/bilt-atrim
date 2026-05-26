@@ -120,7 +120,7 @@ export default function ProductDetail() {
   return (
     <>
       <Helmet>
-        <title>{product.name} | מרקט גוגל</title>
+        <title>{`${product.name || 'מוצר'} | מרקט גוגל`}</title>
         <meta name="description" content={product.description} />
         <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
       </Helmet>

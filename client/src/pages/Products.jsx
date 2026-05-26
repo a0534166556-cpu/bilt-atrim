@@ -51,7 +51,7 @@ export default function Products() {
   return (
     <>
       <Helmet>
-        <title>{q ? `חיפוש: ${q}` : 'כל המוצרים'} | מרקט גוגל</title>
+        <title>{`${q ? `חיפוש: ${q}` : 'כל המוצרים'} | מרקט גוגל`}</title>
       </Helmet>
       <div className="container page products-page">
         <h1>{q ? `תוצאות: "${q}"` : 'כל המוצרים'}</h1>
