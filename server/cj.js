@@ -392,6 +392,7 @@ export async function importCjProducts(
   pids,
   { markupPercent = 30, categoryId = 'electronics', translateToHebrew = true } = {}
 ) {
+  const doTranslate = translateToHebrew !== false;
   const imported = [];
   const skipped = [];
 
@@ -404,7 +405,7 @@ export async function importCjProducts(
       const detail = await getCjProductDetail(pid);
       let name = detail.name;
       let description = detail.description;
-      if (translateToHebrew) {
+      if (doTranslate) {
         try {
           const translated = await translateProductFields({ name, description });
           name = translated.name;

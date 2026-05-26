@@ -20,11 +20,11 @@ import ProductDescription from '../components/ProductDescription';
 import ProductMediaGallery from '../components/ProductMediaGallery';
 import { addRecentlyViewed } from '../hooks/useRecentlyViewed';
 
-function looksEnglish(text) {
+function looksHebrew(text) {
   if (!text?.trim()) return false;
   const hebrew = (text.match(/[\u0590-\u05FF]/g) || []).length;
   const latin = (text.match(/[a-zA-Z]/g) || []).length;
-  return latin > 8 && latin > hebrew * 1.5;
+  return hebrew >= 4 && hebrew > latin * 1.2;
 }
 
 export default function ProductDetail() {
@@ -79,19 +79,19 @@ export default function ProductDetail() {
   const mainImage = galleryImages[0] || product.image;
   const outOfStock = Number(product.stock) === 0;
 
-  const showTranslate =
-    (looksEnglish(product.description) || looksEnglish(product.name)) && !displayDesc;
+  const isHebrewProduct = looksHebrew(product.name) || looksHebrew(product.description);
+  const showTranslate = isHebrewProduct && !displayDesc;
 
   const handleTranslate = async () => {
     setTranslating(true);
     try {
-      const translated = await translateProductContent({
-        name: product.name,
-        description: product.description,
-      });
+      const translated = await translateProductContent(
+        { name: product.name, description: product.description },
+        'toEnglish'
+      );
       setDisplayName(translated.name || product.name);
       setDisplayDesc(translated.description || product.description);
-      showToast('תורגם לעברית');
+      showToast('תורגם לאנגלית');
     } catch (err) {
       showToast(err.message, 'error');
     } finally {
@@ -211,7 +211,7 @@ export default function ProductDetail() {
                     disabled={translating}
                     onClick={handleTranslate}
                   >
-                    {translating ? 'מתרגם...' : 'תרגם לעברית'}
+                    {translating ? 'מתרגם...' : 'תרגם לאנגלית'}
                   </button>
                 )}
                 {displayDesc && (
@@ -223,11 +223,11 @@ export default function ProductDetail() {
                       setDisplayName(null);
                     }}
                   >
-                    הצג מקור (אנגלית)
+                    הצג בעברית
                   </button>
                 )}
                 {showTranslate && (
-                  <span className="translate-hint">תצוגה בלבד — לשמירה: ניהול → ייבוא CJ → סנכרן עם תרגום</span>
+                  <span className="translate-hint">תצוגה באנגלית בלבד — המוצר נשמר בעברית בחנות</span>
                 )}
               </div>
             )}

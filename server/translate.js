@@ -1,5 +1,6 @@
 /**
- * תרגום לאנגלית → עברית (MyMemory – חינמי, אופציונלי MYMEMORY_EMAIL ליותר מכסה)
+ * תרגום MyMemory (חינמי) – en↔he
+ * MYMEMORY_EMAIL אופציונלי למכסה גבוהה יותר
  */
 
 const MYMEMORY_URL = 'https://api.mymemory.translated.net/get';
@@ -27,6 +28,15 @@ export function needsTranslation(text) {
   return latin > hebrew * 1.5;
 }
 
+export function isMostlyHebrew(text) {
+  const clean = stripHtml(text);
+  if (!clean || clean.length < 4) return false;
+  const hebrew = (clean.match(/[\u0590-\u05FF]/g) || []).length;
+  const latin = (clean.match(/[a-zA-Z]/g) || []).length;
+  if (hebrew < 4) return false;
+  return hebrew > latin * 1.5;
+}
+
 function splitChunks(text, maxLen = CHUNK_SIZE) {
   if (text.length <= maxLen) return [text];
   const chunks = [];
@@ -41,10 +51,10 @@ function splitChunks(text, maxLen = CHUNK_SIZE) {
   return chunks;
 }
 
-async function translateChunk(chunk) {
+async function translateChunk(chunk, langpair) {
   const url = new URL(MYMEMORY_URL);
   url.searchParams.set('q', chunk);
-  url.searchParams.set('langpair', 'en|he');
+  url.searchParams.set('langpair', langpair);
   const email = process.env.MYMEMORY_EMAIL?.trim();
   if (email) url.searchParams.set('de', email);
 
@@ -60,18 +70,26 @@ function sleep(ms) {
   return new Promise((r) => setTimeout(r, ms));
 }
 
-export async function translateToHebrew(text) {
+async function translateText(text, langpair, { skipIf } = {}) {
   const clean = stripHtml(text);
   if (!clean) return '';
-  if (!needsTranslation(clean)) return clean;
+  if (skipIf && !skipIf(clean)) return clean;
 
   const chunks = splitChunks(clean);
   const parts = [];
   for (let i = 0; i < chunks.length; i += 1) {
-    parts.push(await translateChunk(chunks[i]));
+    parts.push(await translateChunk(chunks[i], langpair));
     if (i < chunks.length - 1) await sleep(350);
   }
   return parts.join(' ').trim();
+}
+
+export async function translateToHebrew(text) {
+  return translateText(text, 'en|he', { skipIf: (clean) => needsTranslation(clean) });
+}
+
+export async function translateToEnglish(text) {
+  return translateText(text, 'he|en', { skipIf: (clean) => isMostlyHebrew(clean) });
 }
 
 export async function translateProductFields({ name, description }) {
@@ -83,4 +101,43 @@ export async function translateProductFields({ name, description }) {
     name: translatedName || name,
     description: translatedDesc || description,
   };
+}
+
+export async function translateProductFieldsToEnglish({ name, description }) {
+  const [translatedName, translatedDesc] = await Promise.all([
+    name ? translateToEnglish(name) : Promise.resolve(name),
+    description ? translateToEnglish(description) : Promise.resolve(description),
+  ]);
+  return {
+    name: translatedName || name,
+    description: translatedDesc || description,
+  };
+}
+
+/** מוצרים באנגלית במסד → עברית (ייבוא ישן) */
+export async function translateEnglishProductsInDb({ getAllProducts, updateProduct }) {
+  const products = await getAllProducts();
+  const results = [];
+
+  for (const p of products) {
+    const nameNeeds = needsTranslation(p.name);
+    const descNeeds = needsTranslation(p.description);
+    if (!nameNeeds && !descNeeds) continue;
+
+    try {
+      const translated = await translateProductFields({
+        name: nameNeeds ? p.name : p.name,
+        description: descNeeds ? p.description : p.description,
+      });
+      await updateProduct(p.id, {
+        name: nameNeeds ? translated.name : p.name,
+        description: descNeeds ? translated.description : p.description,
+      });
+      results.push({ id: p.id, status: 'ok' });
+      await sleep(500);
+    } catch (err) {
+      results.push({ id: p.id, status: 'error', error: err.message });
+    }
+  }
+  return results;
 }

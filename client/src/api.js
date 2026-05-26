@@ -93,10 +93,10 @@ export async function trackOrder(orderId, email) {
   return request(`${API}/orders/track?orderId=${orderId}&email=${encodeURIComponent(email)}`);
 }
 
-export async function translateProductContent({ name, description }) {
+export async function translateProductContent({ name, description }, direction = 'toEnglish') {
   return request(`${API}/translate`, {
     method: 'POST',
-    body: JSON.stringify({ name, description }),
+    body: JSON.stringify({ name, description, direction }),
   });
 }
 

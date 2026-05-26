@@ -187,7 +187,7 @@ export default function AdminCJImport() {
                   checked={translateToHebrew}
                   onChange={(e) => setTranslateToHebrew(e.target.checked)}
                 />
-                תרגם שם ותיאור לעברית אוטומטית
+                שמור מוצרים בעברית (מומלץ – ברירת מחדל)
               </label>
               <button
                 type="button"

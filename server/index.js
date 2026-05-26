@@ -38,7 +38,13 @@ import {
   deleteDemoProducts,
 } from './db.js';
 import { isEmailConfigured, notifyOrderConfirmation, notifyOrderShipped } from './email.js';
-import { translateToHebrew, translateProductFields, needsTranslation } from './translate.js';
+import {
+  translateToHebrew,
+  translateProductFields,
+  translateProductFieldsToEnglish,
+  needsTranslation,
+  translateEnglishProductsInDb,
+} from './translate.js';
 import { buildOrderFromBody } from './orderBuild.js';
 import {
   isCjConfigured,
@@ -266,16 +272,22 @@ app.post(
 app.post(
   '/api/translate',
   asyncHandler(async (req, res) => {
-    const { text, name, description } = req.body || {};
+    const { text, name, description, direction = 'toHebrew' } = req.body || {};
+    const toEnglish = direction === 'toEnglish';
+
     if (text?.trim()) {
+      if (toEnglish) {
+        const { translateToEnglish } = await import('./translate.js');
+        const translated = await translateToEnglish(text);
+        return res.json({ translated });
+      }
       const translated = await translateToHebrew(text);
       return res.json({ translated, needsTranslation: needsTranslation(text) });
     }
     if (name || description) {
-      const translated = await translateProductFields({
-        name: name || '',
-        description: description || '',
-      });
+      const translated = toEnglish
+        ? await translateProductFieldsToEnglish({ name: name || '', description: description || '' })
+        : await translateProductFields({ name: name || '', description: description || '' });
       return res.json(translated);
     }
     res.status(400).json({ error: 'חסר טקסט לתרגום' });
@@ -797,6 +809,12 @@ async function start() {
         })
         .catch((err) => console.warn('CJ stale price fix:', err.message));
     }
+    translateEnglishProductsInDb({ getAllProducts, updateProduct })
+      .then((rows) => {
+        const ok = rows.filter((r) => r.status === 'ok');
+        if (ok.length) console.log(`תורגמו ${ok.length} מוצרים מאנגלית לעברית במסד`);
+      })
+      .catch((err) => console.warn('Product Hebrew migration:', err.message));
   });
 }
 
