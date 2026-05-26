@@ -26,6 +26,7 @@ export default function AdminCJImport() {
   const [loadingMy, setLoadingMy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [recalcPrices, setRecalcPrices] = useState(false);
   const [translateToHebrew, setTranslateToHebrew] = useState(true);
 
   useEffect(() => {

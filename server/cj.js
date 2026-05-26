@@ -351,11 +351,20 @@ export async function getCjProductDetail(pid) {
   };
 }
 
+/** מוצרים עם מחיר ישן (דולר CJ נשמר כ-₪) */
+export function isLikelyStaleCjPrice(price) {
+  const n = Number(price);
+  return Number.isFinite(n) && n > 0 && n < 15;
+}
+
 /** מעדכן מחירי מכירה בשקלים לכל המוצרים מ-CJ שכבר בחנות */
-export async function recalculateAllCjPrices(markupPercent = 30) {
+export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = false } = {}) {
   const { getAllProducts, updateProduct } = await import('./db.js');
   const products = await getAllProducts();
-  const cjProducts = products.filter((p) => p.cjPid);
+  let cjProducts = products.filter((p) => p.cjPid);
+  if (onlyStale) {
+    cjProducts = cjProducts.filter((p) => isLikelyStaleCjPrice(p.price));
+  }
   const results = [];
 
   for (const p of cjProducts) {
@@ -373,6 +382,10 @@ export async function recalculateAllCjPrices(markupPercent = 30) {
     }
   }
   return results;
+}
+
+export async function recalculateStaleCjPrices(markupPercent = 30) {
+  return recalculateAllCjPrices(markupPercent, { onlyStale: true });
 }
 
 export async function importCjProducts(

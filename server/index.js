@@ -47,6 +47,7 @@ import {
   getMyCjProducts,
   syncMyCjProductsToStore,
   recalculateAllCjPrices,
+  recalculateStaleCjPrices,
 } from './cj.js';
 import {
   getPaymentConfig,
@@ -597,7 +598,11 @@ app.post(
       categoryId,
       translateToHebrew: translateToHebrew !== false,
     });
-    const results = await importCjProductsToStore(imported, categoryId);
+    const results = await importCjProductsToStore(
+      imported,
+      categoryId,
+      Number(markupPercent) || 30
+    );
     res.status(201).json({
       imported: results.filter((r) => r.status === 'imported').length,
       updated: results.filter((r) => r.status === 'updated').length,
@@ -660,7 +665,11 @@ app.post(
     if (!myProducts.length) {
       return res.json({ synced: 0, message, myProducts: [], errors: [] });
     }
-    const results = await importCjProductsToStore(imported, cat);
+    const results = await importCjProductsToStore(
+      imported,
+      cat,
+      Number(markupPercent) || 30
+    );
     const dbFailed = results.filter((r) => r.status === 'failed').length;
     res.status(201).json({
       synced: results.filter((r) => r.status !== 'failed').length,
@@ -778,6 +787,16 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Shop running on port ${PORT}`);
     console.log(`Google feed: ${SITE_URL}/feed/google-shopping.xml`);
+    if (isCjConfigured()) {
+      recalculateStaleCjPrices(30)
+        .then((rows) => {
+          const ok = rows.filter((r) => r.price != null);
+          if (ok.length) {
+            console.log(`CJ: תוקנו מחירים ישנים ל-${ok.length} מוצרים (דולר→שקל)`);
+          }
+        })
+        .catch((err) => console.warn('CJ stale price fix:', err.message));
+    }
   });
 }
 

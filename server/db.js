@@ -1,4 +1,5 @@
 import mysql from 'mysql2/promise';
+import { calculateRetailPriceIls } from './pricing.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -337,6 +338,30 @@ function safePrice(value, min = 1) {
   return Math.max(min, safeNumber(value, min));
 }
 
+/** מחיר מכירה בש"ח – לא מחיר CJ בדולרים */
+function resolveStorePriceIls(item, markupPercent = 30) {
+  const retail = Number(item.retail);
+  if (Number.isFinite(retail) && retail >= 5) return Math.ceil(retail);
+
+  const costUsd = Number(item.cost ?? item.costUsd);
+  if (Number.isFinite(costUsd) && costUsd > 0) {
+    return calculateRetailPriceIls(costUsd, {
+      markupPercent,
+      shippingUsd: item.shippingUsd,
+    });
+  }
+
+  const raw = Number(item.price);
+  if (Number.isFinite(raw) && raw > 0 && raw < 25) {
+    return calculateRetailPriceIls(raw, {
+      markupPercent,
+      shippingUsd: item.shippingUsd,
+    });
+  }
+
+  return safePrice(item.retail ?? item.price, 5);
+}
+
 function parseImagesColumn(imagesCol, fallbackImage) {
   if (!imagesCol) return fallbackImage ? [fallbackImage] : [];
   try {
@@ -472,9 +497,11 @@ export async function getProductByCjPid(cjPid) {
   return row ? Number(row.id) : null;
 }
 
-export async function importCjProductsToStore(cjItems, categoryId) {
+export async function importCjProductsToStore(cjItems, categoryId, markupPercent = 30) {
   const results = [];
   const cat = categoryId && String(categoryId) !== 'NaN' ? String(categoryId) : 'electronics';
+  const markup = Number(markupPercent);
+  const validMarkup = Number.isFinite(markup) ? markup : 30;
 
   for (const item of cjItems) {
     if (!item?.pid) {
@@ -488,7 +515,7 @@ export async function importCjProductsToStore(cjItems, categoryId) {
         sku: (item.sku || `CJ-${String(item.pid).slice(0, 8)}`).slice(0, 80),
         name,
         description: String(item.description || name).slice(0, 8000),
-        price: safePrice(item.retail ?? item.price, 1),
+        price: resolveStorePriceIls(item, validMarkup),
         image: images[0] || '',
         images,
         videoUrl: item.videoUrl || item.videos?.[0]?.url || '',
