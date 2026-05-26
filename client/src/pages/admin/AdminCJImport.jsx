@@ -19,6 +19,7 @@ export default function AdminCJImport() {
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
   const [myProducts, setMyProducts] = useState([]);
+  const [myProductsStatus, setMyProductsStatus] = useState(null);
   const [selected, setSelected] = useState(new Set());
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState('electronics');
@@ -38,15 +39,20 @@ export default function AdminCJImport() {
 
   const loadMyProducts = async () => {
     setLoadingMy(true);
+    setMyProductsStatus(null);
     try {
       const data = await adminCjMyProducts();
       setMyProducts(data.list || []);
       if (!data.list?.length) {
         showToast('אין מוצרים – לחץ Added על מוצרים באתר CJ קודם', 'error');
+        setMyProductsStatus('לא נמצאו מוצרים ב-CJ. ודא שלחצת Added על מוצרים ב-CJ.');
+      } else {
+        setMyProductsStatus(`נמצאו ${data.list.length} מוצרים ממתינים ב-CJ.`);
       }
     } catch (err) {
       showToast(err.message, 'error');
       setMyProducts([]);
+      setMyProductsStatus(err.message || 'שגיאה בטעינת מוצרים מ-CJ');
     } finally {
       setLoadingMy(false);
     }
@@ -240,9 +246,10 @@ export default function AdminCJImport() {
                 {syncing ? 'מסנכרן ומתרגם...' : 'סנכרן הכל לאתר'}
               </button>
             </div>
-            {myProducts.length > 0 && (
+            {myProductsStatus && (
               <p className="cj-my-count">
-                {myProducts.length} מוצרים ממתינים ב-CJ (לחץ סנכרן כדי להעלות לאתר)
+                {myProductsStatus}
+                {myProducts.length > 0 ? ' (לחץ סנכרן כדי להעלות לאתר)' : ''}
               </p>
             )}
           </div>
