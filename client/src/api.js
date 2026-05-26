@@ -93,6 +93,13 @@ export async function trackOrder(orderId, email) {
   return request(`${API}/orders/track?orderId=${orderId}&email=${encodeURIComponent(email)}`);
 }
 
+export async function translateProductContent({ name, description }) {
+  return request(`${API}/translate`, {
+    method: 'POST',
+    body: JSON.stringify({ name, description }),
+  });
+}
+
 export async function adminLogin(password) {
   return request(`${API}/admin/login`, { method: 'POST', body: JSON.stringify({ password }) });
 }
@@ -173,10 +180,10 @@ export async function adminCjSearch(q, page = 1) {
   return request(`${API}/admin/cj/search?${params}`);
 }
 
-export async function adminCjImport(pids, { markupPercent, categoryId }) {
+export async function adminCjImport(pids, { markupPercent, categoryId, translateToHebrew }) {
   return request(`${API}/admin/cj/import`, {
     method: 'POST',
-    body: JSON.stringify({ pids, markupPercent, categoryId }),
+    body: JSON.stringify({ pids, markupPercent, categoryId, translateToHebrew }),
   });
 }
 
@@ -185,11 +192,15 @@ export async function adminCjMyProducts(page = 1) {
   return request(`${API}/admin/cj/my-products?${params}`);
 }
 
-export async function adminCjSyncMy({ markupPercent, categoryId }) {
+export async function adminCjSyncMy({ markupPercent, categoryId, translateToHebrew }) {
   return request(`${API}/admin/cj/sync-my`, {
     method: 'POST',
-    body: JSON.stringify({ markupPercent, categoryId }),
+    body: JSON.stringify({ markupPercent, categoryId, translateToHebrew }),
   });
+}
+
+export async function adminTranslateProduct(id) {
+  return request(`${API}/admin/products/${id}/translate`, { method: 'POST' });
 }
 
 

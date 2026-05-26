@@ -5,6 +5,7 @@ import {
   adminCreateProduct,
   adminUpdateProduct,
   adminProducts,
+  adminTranslateProduct,
   fetchCategories,
 } from '../../api';
 import { useToast } from '../../context/ToastContext';
@@ -33,6 +34,7 @@ export default function AdminProductForm() {
   const [form, setForm] = useState(empty);
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [translating, setTranslating] = useState(false);
 
   useEffect(() => {
     fetchCategories().then(setCategories);
@@ -63,6 +65,27 @@ export default function AdminProductForm() {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setForm((f) => ({ ...f, [name]: type === 'checkbox' ? checked : value }));
+  };
+
+  const handleTranslate = async () => {
+    if (!isEdit) {
+      showToast('שמור את המוצר קודם', 'error');
+      return;
+    }
+    setTranslating(true);
+    try {
+      const updated = await adminTranslateProduct(id);
+      setForm((f) => ({
+        ...f,
+        name: updated.name,
+        description: updated.description,
+      }));
+      showToast('תורגם ונשמר בעברית');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setTranslating(false);
+    }
   };
 
   const handleSubmit = async (e) => {
@@ -137,6 +160,18 @@ export default function AdminProductForm() {
           <label className="full-width">תיאור
             <textarea name="description" rows={4} value={form.description} onChange={handleChange} />
           </label>
+          {isEdit && (
+            <div className="full-width">
+              <button
+                type="button"
+                className="btn btn-outline btn-sm"
+                disabled={translating}
+                onClick={handleTranslate}
+              >
+                {translating ? 'מתרגם...' : 'תרגם שם ותיאור לעברית ושמור'}
+              </button>
+            </div>
+          )}
           <label className="checkbox-label">
             <input type="checkbox" name="featured" checked={form.featured} onChange={handleChange} />
             מוצר מומלץ (מוצג בדף הבית)

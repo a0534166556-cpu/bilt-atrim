@@ -1,3 +1,6 @@
+import { translateProductFields } from './translate.js';
+import { calculateRetailPriceIls, extractShippingUsd } from './pricing.js';
+
 const CJ_BASE = 'https://developers.cjdropshipping.com/api2.0/v1';
 
 /** CJ_ACCESS_TOKEN = API Key (CJxxx@api@...) – מומר אוטומטית ל-access token */
@@ -129,13 +132,43 @@ function pickName(item) {
   return String(raw).replace(/^\[.*?\]\s*/, '').slice(0, 200);
 }
 
+function enhanceImageUrl(url) {
+  if (!url || typeof url !== 'string') return '';
+  let u = url.trim();
+  if (u.startsWith('//')) u = `https:${u}`;
+  if (!/^https?:\/\//i.test(u)) return '';
+  return u
+    .replace(/_\d+x\d+(?=\.\w+$)/i, '')
+    .replace(/-(\d+)x(\d+)(?=\.\w+$)/i, '')
+    .replace(/\/thumbnail\//i, '/')
+    .replace(/\?x-oss-process=[^&]+/gi, '');
+}
+
+function extractUrlsFromHtml(html) {
+  const urls = [];
+  if (!html || typeof html !== 'string') return urls;
+  const imgRe = /<img[^>]+src=["']([^"']+)["']/gi;
+  const videoRe = /<video[^>]+src=["']([^"']+)["']/gi;
+  const sourceRe = /<source[^>]+src=["']([^"']+)["']/gi;
+  let m;
+  while ((m = imgRe.exec(html))) urls.push({ type: 'image', url: m[1] });
+  while ((m = videoRe.exec(html))) urls.push({ type: 'video', url: m[1] });
+  while ((m = sourceRe.exec(html))) urls.push({ type: 'video', url: m[1] });
+  return urls;
+}
+
 function collectImages(p) {
-  const urls = new Set();
+  const urls = [];
+  const seen = new Set();
   const add = (u) => {
-    if (u && typeof u === 'string' && /^https?:\/\//i.test(u)) urls.add(u);
+    const enhanced = enhanceImageUrl(u);
+    if (enhanced && !seen.has(enhanced)) {
+      seen.add(enhanced);
+      urls.push(enhanced);
+    }
   };
-  add(p.productImage);
   add(p.bigImage);
+  add(p.productImage);
   if (Array.isArray(p.productImageSet)) p.productImageSet.forEach(add);
   if (Array.isArray(p.images)) {
     p.images.forEach((i) => add(typeof i === 'string' ? i : i?.url || i?.image));
@@ -148,18 +181,64 @@ function collectImages(p) {
   (p.variantList || p.variants || []).forEach((v) => {
     add(v.variantImage || v.image || v.imageUrl);
   });
-  return [...urls].slice(0, 12);
+  const desc = p.descriptionEn || p.description || p.productDescription || '';
+  extractUrlsFromHtml(desc).forEach((item) => {
+    if (item.type === 'image') add(item.url);
+  });
+  return urls.slice(0, 24);
+}
+
+function videoEntry(url, poster = '') {
+  const u = String(url).trim();
+  if (!/^https?:\/\//i.test(u)) return null;
+  return {
+    url: u,
+    poster: enhanceImageUrl(poster) || '',
+  };
+}
+
+function collectVideos(p) {
+  const list = [];
+  const seen = new Set();
+  const add = (url, poster) => {
+    const entry = videoEntry(url, poster || p.productImage || p.bigImage);
+    if (entry && !seen.has(entry.url)) {
+      seen.add(entry.url);
+      list.push(entry);
+    }
+  };
+
+  if (p.videoUrl) add(p.videoUrl);
+
+  const arrays = [
+    p.productVideo,
+    p.productVideos,
+    p.videos,
+    p.videoList,
+  ];
+  for (const arr of arrays) {
+    if (!Array.isArray(arr)) continue;
+    for (const v of arr) {
+      if (typeof v === 'string') {
+        if (v.includes('.mp4') || v.includes('video')) add(v);
+        else add(`https://video-cf.cjdropshipping.com/${v}`, p.productImage);
+      } else if (v) {
+        add(v.videoUrl || v.url || v.src, v.cover || v.poster || v.thumbnail || v.image);
+      }
+    }
+  }
+
+  const desc = p.descriptionEn || p.description || p.productDescription || '';
+  extractUrlsFromHtml(desc).forEach((item) => {
+    if (item.type === 'video') add(item.url);
+  });
+
+  return list.slice(0, 10);
 }
 
 function collectVideo(p) {
-  if (p.videoUrl && /^https?:\/\//i.test(p.videoUrl)) return p.videoUrl;
-  const videos = p.productVideos || p.videos || [];
-  if (Array.isArray(videos) && videos.length) {
-    const v = videos[0];
-    const url = typeof v === 'string' ? v : v.videoUrl || v.url || v.src;
-    if (url && /^https?:\/\//i.test(url)) return url;
-  }
-  return '';
+  const videos = collectVideos(p);
+  return videos[0]?.url || '';
 }
 
 function mapListItem(item) {
@@ -172,6 +251,7 @@ function mapListItem(item) {
     image: images[0] || item.productImage || '',
     images,
     videoUrl: collectVideo(item),
+    videos: collectVideos(item),
     price,
     categoryName: item.categoryName || item.threeCategoryName || '',
   };
@@ -227,22 +307,23 @@ export async function getAllMyCjProducts() {
 }
 
 export async function getCjProductDetail(pid) {
-  const params = new URLSearchParams({
-    pid,
-    features: 'enable_video',
-  });
+  const params = new URLSearchParams({ pid });
+  params.append('features', 'enable_video');
+  params.append('features', 'enable_description');
   const data = await cjRequest(`/product/query?${params}`);
   const p = data.data || {};
   const variants = p.variantList || p.variants || [];
   const images = collectImages(p);
-  const videoUrl = collectVideo(p);
+  const videos = collectVideos(p);
+  const videoUrl = videos[0]?.url || '';
   const sellPrices = variants
     .map((v) => Number(v.sellPrice ?? v.price))
     .filter((n) => n > 0);
-  const sellPrice =
+  const costUsd =
     sellPrices.length > 0
       ? Math.min(...sellPrices)
-      : Number(p.sellPrice ?? p.productSellPrice ?? 0);
+      : Number(p.sellPrice ?? p.productSellPrice ?? p.productPrice ?? 0);
+  const shippingUsd = extractShippingUsd(p, variants);
   const stock =
     variants.reduce((sum, v) => sum + (Number(v.inventory ?? v.stock) || 0), 0) || 99;
 
@@ -260,14 +341,18 @@ export async function getCjProductDetail(pid) {
     description: String(desc).slice(0, 8000),
     image: images[0] || '',
     images,
+    videos,
     videoUrl,
-    price: sellPrice,
+    price: costUsd,
     stock: stock || 99,
     categoryName: p.categoryName || '',
   };
 }
 
-export async function importCjProducts(pids, { markupPercent = 30, categoryId = 'electronics' } = {}) {
+export async function importCjProducts(
+  pids,
+  { markupPercent = 30, categoryId = 'electronics', translateToHebrew = true } = {}
+) {
   const imported = [];
   const skipped = [];
 
@@ -278,12 +363,27 @@ export async function importCjProducts(pids, { markupPercent = 30, categoryId = 
     if (!pid) continue;
     try {
       const detail = await getCjProductDetail(pid);
-      const cost = Number(detail.price);
-      const validCost = Number.isFinite(cost) && cost > 0 ? cost : 1;
-      const retail = Math.max(1, Math.ceil(validCost * (1 + validMarkup / 100)));
+      let name = detail.name;
+      let description = detail.description;
+      if (translateToHebrew) {
+        try {
+          const translated = await translateProductFields({ name, description });
+          name = translated.name;
+          description = translated.description;
+        } catch (err) {
+          console.warn(`CJ translate ${pid}:`, err.message);
+        }
+      }
+      const costUsd = Number(detail.costUsd ?? detail.price);
+      const retail = calculateRetailPriceIls(costUsd, {
+        markupPercent: validMarkup,
+        shippingUsd: detail.shippingUsd,
+      });
       imported.push({
         ...detail,
-        cost,
+        name,
+        description,
+        cost: costUsd,
         retail,
         categoryId,
       });
@@ -295,12 +395,20 @@ export async function importCjProducts(pids, { markupPercent = 30, categoryId = 
   return { imported, skipped };
 }
 
-export async function syncMyCjProductsToStore({ markupPercent = 30, categoryId = 'electronics' } = {}) {
+export async function syncMyCjProductsToStore({
+  markupPercent = 30,
+  categoryId = 'electronics',
+  translateToHebrew = true,
+} = {}) {
   const myProducts = await getAllMyCjProducts();
   if (!myProducts.length) {
     return { myProducts: [], imported: [], skipped: [], message: 'אין מוצרים ב-CJ – לחץ Added על מוצרים ב-CJ קודם' };
   }
   const pids = myProducts.map((p) => p.pid);
-  const { imported, skipped } = await importCjProducts(pids, { markupPercent, categoryId });
+  const { imported, skipped } = await importCjProducts(pids, {
+    markupPercent,
+    categoryId,
+    translateToHebrew,
+  });
   return { myProducts, imported, skipped };
 }

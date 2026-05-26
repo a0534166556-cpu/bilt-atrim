@@ -145,6 +145,9 @@ export async function initDb() {
   const [[{ c }]] = await pool.query('SELECT COUNT(*) AS c FROM products');
   if (c === 0) await seedFromJson();
   else await ensureStore();
+
+  const removed = await deleteDemoProducts();
+  if (removed > 0) console.log(`Removed ${removed} demo products`);
 }
 
 async function migrateProductCjColumns() {
@@ -153,6 +156,7 @@ async function migrateProductCjColumns() {
     ['cj_sku', 'VARCHAR(100) DEFAULT NULL'],
     ['images', 'JSON NULL'],
     ['video_url', 'VARCHAR(500) DEFAULT NULL'],
+    ['videos', 'JSON NULL'],
   ];
   for (const [name, def] of cols) {
     try {
@@ -299,7 +303,29 @@ function mapProduct(row) {
     cjSku: row.cj_sku || null,
     images: parseImagesColumn(row.images, row.image),
     videoUrl: row.video_url || '',
+    videos: parseVideosColumn(row.videos, row.video_url),
   };
+}
+
+function parseVideosColumn(videosCol, fallbackVideoUrl) {
+  if (videosCol) {
+    try {
+      const parsed = typeof videosCol === 'string' ? JSON.parse(videosCol) : videosCol;
+      if (Array.isArray(parsed) && parsed.length) {
+        return parsed
+          .map((v) =>
+            typeof v === 'string'
+              ? { url: v, poster: '' }
+              : { url: v?.url || '', poster: v?.poster || '' }
+          )
+          .filter((v) => v.url);
+      }
+    } catch {
+      /* ignore */
+    }
+  }
+  if (fallbackVideoUrl) return [{ url: fallbackVideoUrl, poster: '' }];
+  return [];
 }
 
 function safeNumber(value, fallback = 0) {
@@ -414,8 +440,8 @@ export async function createProduct(body) {
   const images = body.images?.length ? body.images : body.image ? [body.image] : [];
   const mainImage = images[0] || body.image || '';
   const [result] = await pool.query(
-    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku, images, video_url)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku, images, video_url, videos)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.sku || `SKU-${Date.now()}`,
       body.name,
@@ -434,6 +460,7 @@ export async function createProduct(body) {
       body.cjSku || null,
       images.length ? JSON.stringify(images) : null,
       body.videoUrl || null,
+      body.videos?.length ? JSON.stringify(body.videos) : null,
     ]
   );
   return getProductById(result.insertId);
@@ -464,7 +491,8 @@ export async function importCjProductsToStore(cjItems, categoryId) {
         price: safePrice(item.retail ?? item.price, 1),
         image: images[0] || '',
         images,
-        videoUrl: item.videoUrl || '',
+        videoUrl: item.videoUrl || item.videos?.[0]?.url || '',
+        videos: item.videos?.length ? item.videos : item.videoUrl ? [{ url: item.videoUrl, poster: images[0] || '' }] : [],
         brand: 'CJ Dropshipping',
         category: cat,
         googleCategory: 'Electronics',
@@ -523,6 +551,13 @@ export async function updateProduct(id, body) {
       body.active != null ? (body.active ? 1 : 0) : existing.active ? 1 : 0,
       images.length ? JSON.stringify(images) : null,
       body.videoUrl != null ? body.videoUrl || null : existing.videoUrl || null,
+      body.videos != null
+        ? body.videos.length
+          ? JSON.stringify(body.videos)
+          : null
+        : existing.videos?.length
+          ? JSON.stringify(existing.videos)
+          : null,
       id,
     ]
   );
@@ -531,6 +566,17 @@ export async function updateProduct(id, body) {
 
 export async function deleteProduct(id) {
   await pool.query('DELETE FROM products WHERE id = ?', [id]);
+}
+
+/** מוחק מוצרי דמה (ללא cj_pid) – TechPro, SoundMax וכו' */
+export async function deleteDemoProducts() {
+  const [rows] = await pool.query('SELECT id FROM products WHERE cj_pid IS NULL');
+  if (!rows.length) return 0;
+  for (const row of rows) {
+    await pool.query('DELETE FROM reviews WHERE product_id = ?', [row.id]);
+  }
+  const [result] = await pool.query('DELETE FROM products WHERE cj_pid IS NULL');
+  return result.affectedRows || 0;
 }
 
 export async function duplicateProduct(id) {

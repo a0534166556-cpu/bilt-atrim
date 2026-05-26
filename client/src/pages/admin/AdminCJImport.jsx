@@ -25,6 +25,7 @@ export default function AdminCJImport() {
   const [loadingMy, setLoadingMy] = useState(false);
   const [importing, setImporting] = useState(false);
   const [syncing, setSyncing] = useState(false);
+  const [translateToHebrew, setTranslateToHebrew] = useState(true);
 
   useEffect(() => {
     adminCjStatus().then((s) => setConfigured(s.configured)).catch(() => setConfigured(false));
@@ -50,7 +51,7 @@ export default function AdminCJImport() {
   const syncAllFromCj = async () => {
     setSyncing(true);
     try {
-      const data = await adminCjSyncMy({ markupPercent: markup, categoryId });
+      const data = await adminCjSyncMy({ markupPercent: markup, categoryId, translateToHebrew });
       if (data.synced === 0 && data.message) {
         showToast(data.message, 'error');
         return;
@@ -106,7 +107,11 @@ export default function AdminCJImport() {
     }
     setImporting(true);
     try {
-      const data = await adminCjImport([...selected], { markupPercent: markup, categoryId });
+      const data = await adminCjImport([...selected], {
+        markupPercent: markup,
+        categoryId,
+        translateToHebrew,
+      });
       showToast(
         `יובאו ${data.imported} מוצרים${data.updated ? `, עודכנו ${data.updated}` : ''}`
       );
@@ -162,6 +167,14 @@ export default function AdminCJImport() {
                   ))}
                 </select>
               </label>
+              <label className="checkbox-label cj-translate-check">
+                <input
+                  type="checkbox"
+                  checked={translateToHebrew}
+                  onChange={(e) => setTranslateToHebrew(e.target.checked)}
+                />
+                תרגם שם ותיאור לעברית אוטומטית
+              </label>
               <button
                 type="button"
                 className="btn btn-outline"
@@ -176,7 +189,7 @@ export default function AdminCJImport() {
                 disabled={syncing}
                 onClick={syncAllFromCj}
               >
-                {syncing ? 'מסנכרן...' : 'סנכרן הכל לאתר'}
+                {syncing ? 'מסנכרן ומתרגם...' : 'סנכרן הכל לאתר'}
               </button>
             </div>
             {myProducts.length > 0 && (
@@ -219,7 +232,9 @@ export default function AdminCJImport() {
               </div>
               <div className="cj-results-grid">
                 {results.map((p) => {
-                  const retail = Math.ceil(p.price * (1 + markup / 100));
+                  const usdToIls = 3.75;
+                  const shippingUsd = 4;
+                  const retail = Math.ceil((p.price + shippingUsd) * (1 + markup / 100) * usdToIls);
                   return (
                     <label key={p.pid} className={`cj-result-card ${selected.has(p.pid) ? 'selected' : ''}`}>
                       <input
@@ -234,9 +249,9 @@ export default function AdminCJImport() {
                       )}
                       <h3>{p.name}</h3>
                       <p className="cj-prices">
-                        עלות CJ: {formatPrice(p.price)}
+                        עלות CJ: ${p.price?.toFixed?.(2) ?? p.price} + משלוח
                         <br />
-                        <strong>מחיר בחנות: {formatPrice(retail)}</strong>
+                        <strong>מחיר בחנות (₪): {formatPrice(retail)}</strong>
                       </p>
                       <small>SKU: {p.sku || p.pid}</small>
                     </label>

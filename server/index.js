@@ -35,8 +35,10 @@ import {
   cleanExpiredSessions,
   getEffectivePrice,
   importCjProductsToStore,
+  deleteDemoProducts,
 } from './db.js';
 import { isEmailConfigured, notifyOrderConfirmation, notifyOrderShipped } from './email.js';
+import { translateToHebrew, translateProductFields, needsTranslation } from './translate.js';
 import { buildOrderFromBody } from './orderBuild.js';
 import {
   isCjConfigured,
@@ -256,6 +258,25 @@ app.post(
     }
     await subscribeNewsletter(email);
     res.status(201).json({ message: 'נרשמת בהצלחה לניוזלטר!' });
+  })
+);
+
+app.post(
+  '/api/translate',
+  asyncHandler(async (req, res) => {
+    const { text, name, description } = req.body || {};
+    if (text?.trim()) {
+      const translated = await translateToHebrew(text);
+      return res.json({ translated, needsTranslation: needsTranslation(text) });
+    }
+    if (name || description) {
+      const translated = await translateProductFields({
+        name: name || '',
+        description: description || '',
+      });
+      return res.json(translated);
+    }
+    res.status(400).json({ error: 'חסר טקסט לתרגום' });
   })
 );
 
@@ -501,6 +522,30 @@ app.post(
   })
 );
 
+app.post(
+  '/api/admin/products/delete-demo',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const removed = await deleteDemoProducts();
+    res.json({ removed, message: removed ? `נמחקו ${removed} מוצרי דמה` : 'אין מוצרי דמה' });
+  })
+);
+
+app.post(
+  '/api/admin/products/:id/translate',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const product = await getProductById(Number(req.params.id));
+    if (!product) return res.status(404).json({ error: 'מוצר לא נמצא' });
+    const translated = await translateProductFields({
+      name: product.name,
+      description: product.description,
+    });
+    const updated = await updateProduct(product.id, translated);
+    res.json(updated);
+  })
+);
+
 app.put(
   '/api/admin/store',
   requireAdmin,
@@ -537,13 +582,19 @@ app.post(
     if (!isCjConfigured()) {
       return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
     }
-    const { pids, markupPercent = 30, categoryId = 'electronics' } = req.body;
+    const {
+      pids,
+      markupPercent = 30,
+      categoryId = 'electronics',
+      translateToHebrew = true,
+    } = req.body;
     if (!Array.isArray(pids) || !pids.length) {
       return res.status(400).json({ error: 'בחר מוצרים לייבוא' });
     }
     const { imported, skipped } = await importCjProducts(pids, {
       markupPercent: Number(markupPercent) || 30,
       categoryId,
+      translateToHebrew: translateToHebrew !== false,
     });
     const results = await importCjProductsToStore(imported, categoryId);
     res.status(201).json({
@@ -576,11 +627,16 @@ app.post(
     if (!isCjConfigured()) {
       return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
     }
-    const { markupPercent = 30, categoryId = 'electronics' } = req.body || {};
+    const {
+      markupPercent = 30,
+      categoryId = 'electronics',
+      translateToHebrew = true,
+    } = req.body || {};
     const cat = String(categoryId || 'electronics');
     const { myProducts, imported, skipped, message } = await syncMyCjProductsToStore({
       markupPercent: Number(markupPercent) || 30,
       categoryId: cat,
+      translateToHebrew: translateToHebrew !== false,
     });
     if (!myProducts.length) {
       return res.json({ synced: 0, message, myProducts: [], errors: [] });

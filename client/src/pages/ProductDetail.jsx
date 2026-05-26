@@ -7,6 +7,7 @@ import {
   fetchReviews,
   addReview,
   formatPrice,
+  translateProductContent,
 } from '../api';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
@@ -15,7 +16,16 @@ import ProductCard from '../components/ProductCard';
 import StarRating from '../components/StarRating';
 import Breadcrumbs from '../components/Breadcrumbs';
 import RecentlyViewed from '../components/RecentlyViewed';
+import ProductDescription from '../components/ProductDescription';
+import ProductMediaGallery from '../components/ProductMediaGallery';
 import { addRecentlyViewed } from '../hooks/useRecentlyViewed';
+
+function looksEnglish(text) {
+  if (!text?.trim()) return false;
+  const hebrew = (text.match(/[\u0590-\u05FF]/g) || []).length;
+  const latin = (text.match(/[a-zA-Z]/g) || []).length;
+  return latin > 8 && latin > hebrew * 1.5;
+}
 
 export default function ProductDetail() {
   const { id } = useParams();
@@ -24,7 +34,9 @@ export default function ProductDetail() {
   const [related, setRelated] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [quantity, setQuantity] = useState(1);
-  const [activeImage, setActiveImage] = useState(0);
+  const [displayName, setDisplayName] = useState(null);
+  const [displayDesc, setDisplayDesc] = useState(null);
+  const [translating, setTranslating] = useState(false);
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' });
   const { addItem } = useCart();
   const { toggle, has } = useWishlist();
@@ -33,7 +45,8 @@ export default function ProductDetail() {
   useEffect(() => {
     setNotFound(false);
     setProduct(null);
-    setActiveImage(0);
+    setDisplayName(null);
+    setDisplayDesc(null);
     fetchProduct(id)
       .then((p) => {
         setProduct(p);
@@ -54,9 +67,37 @@ export default function ProductDetail() {
   }
   if (!product) return <div className="container page"><p className="loading">טוען...</p></div>;
 
-  const gallery = (product.images?.length ? product.images : [product.image]).filter(Boolean);
-  const mainImage = gallery[activeImage] || product.image;
+  const productTitle = displayName ?? product.name;
+  const productDescription = displayDesc ?? product.description;
+  const galleryImages = (product.images?.length ? product.images : [product.image]).filter(Boolean);
+  const galleryVideos =
+    product.videos?.length > 0
+      ? product.videos
+      : product.videoUrl
+        ? [{ url: product.videoUrl, poster: galleryImages[0] || '' }]
+        : [];
+  const mainImage = galleryImages[0] || product.image;
   const outOfStock = Number(product.stock) === 0;
+
+  const showTranslate =
+    (looksEnglish(product.description) || looksEnglish(product.name)) && !displayDesc;
+
+  const handleTranslate = async () => {
+    setTranslating(true);
+    try {
+      const translated = await translateProductContent({
+        name: product.name,
+        description: product.description,
+      });
+      setDisplayName(translated.name || product.name);
+      setDisplayDesc(translated.description || product.description);
+      showToast('תורגם לעברית');
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setTranslating(false);
+    }
+  };
 
   const handleAdd = () => {
     if (outOfStock) {
@@ -120,41 +161,25 @@ export default function ProductDetail() {
   return (
     <>
       <Helmet>
-        <title>{`${product.name || 'מוצר'} | מרקט גוגל`}</title>
-        <meta name="description" content={product.description} />
+        <title>{`${productTitle || 'מוצר'} | מרקט גוגל`}</title>
+        <meta name="description" content={productDescription} />
         <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
       </Helmet>
 
       <div className="container page product-detail">
-        <Breadcrumbs items={[{ to: '/products', label: 'מוצרים' }, { label: product.name }]} />
+        <Breadcrumbs items={[{ to: '/products', label: 'מוצרים' }, { label: productTitle }]} />
         <div className="product-detail-grid">
           <div className="product-detail-image">
             {product.onSale && <span className="badge-sale large">מבצע</span>}
-            <img src={mainImage} alt={product.name} className="product-gallery-main" />
-            {gallery.length > 1 && (
-              <div className="product-gallery-thumbs">
-                {gallery.map((src, i) => (
-                  <button
-                    key={src + i}
-                    type="button"
-                    className={i === activeImage ? 'active' : ''}
-                    onClick={() => setActiveImage(i)}
-                  >
-                    <img src={src} alt="" />
-                  </button>
-                ))}
-              </div>
-            )}
-            {product.videoUrl && (
-              <div className="product-video">
-                <h3>סרטון מוצר</h3>
-                <video src={product.videoUrl} controls playsInline preload="metadata" />
-              </div>
-            )}
+            <ProductMediaGallery
+              images={galleryImages}
+              videos={galleryVideos}
+              productName={productTitle}
+            />
           </div>
           <div className="product-detail-info">
             <span className="product-brand">{product.brand}</span>
-            <h1>{product.name}</h1>
+            <h1>{productTitle}</h1>
             {product.reviewCount > 0 && (
               <div className="product-rating-row">
                 <StarRating value={Math.round(product.averageRating)} readonly />
@@ -177,7 +202,31 @@ export default function ProductDetail() {
                 אתה חוסך {formatPrice(product.price - product.effectivePrice)}!
               </p>
             )}
-            <p className="product-desc">{product.description}</p>
+            <div className="product-desc-block">
+              <ProductDescription content={productDescription} plain={Boolean(displayDesc)} />
+              {showTranslate && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm translate-btn"
+                  disabled={translating}
+                  onClick={handleTranslate}
+                >
+                  {translating ? 'מתרגם...' : 'תרגם לעברית'}
+                </button>
+              )}
+              {displayDesc && (
+                <button
+                  type="button"
+                  className="btn btn-outline btn-sm translate-btn"
+                  onClick={() => {
+                    setDisplayDesc(null);
+                    setDisplayName(null);
+                  }}
+                >
+                  הצג מקור (אנגלית)
+                </button>
+              )}
+            </div>
             <p className={`stock-info ${outOfStock ? 'out' : product.stock < 5 ? 'low' : ''}`}>
               {outOfStock ? 'אזל מהמלאי' : `במלאי: ${product.stock} יחידות`}
             </p>
