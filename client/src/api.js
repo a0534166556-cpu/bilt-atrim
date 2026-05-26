@@ -180,6 +180,18 @@ export async function adminCjImport(pids, { markupPercent, categoryId }) {
   });
 }
 
+export async function adminCjMyProducts(page = 1) {
+  const params = new URLSearchParams({ page: String(page), size: '50' });
+  return request(`${API}/admin/cj/my-products?${params}`);
+}
+
+export async function adminCjSyncMy({ markupPercent, categoryId }) {
+  return request(`${API}/admin/cj/sync-my`, {
+    method: 'POST',
+    body: JSON.stringify({ markupPercent, categoryId }),
+  });
+}
+
 
 export function formatPrice(price) {
   const n = Number(price);

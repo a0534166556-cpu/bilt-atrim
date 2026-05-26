@@ -24,6 +24,7 @@ export default function ProductDetail() {
   const [related, setRelated] = useState([]);
   const [reviews, setReviews] = useState([]);
   const [quantity, setQuantity] = useState(1);
+  const [activeImage, setActiveImage] = useState(0);
   const [reviewForm, setReviewForm] = useState({ name: '', rating: 5, comment: '' });
   const { addItem } = useCart();
   const { toggle, has } = useWishlist();
@@ -32,6 +33,7 @@ export default function ProductDetail() {
   useEffect(() => {
     setNotFound(false);
     setProduct(null);
+    setActiveImage(0);
     fetchProduct(id)
       .then((p) => {
         setProduct(p);
@@ -52,6 +54,8 @@ export default function ProductDetail() {
   }
   if (!product) return <div className="container page"><p className="loading">טוען...</p></div>;
 
+  const gallery = (product.images?.length ? product.images : [product.image]).filter(Boolean);
+  const mainImage = gallery[activeImage] || product.image;
   const outOfStock = Number(product.stock) === 0;
 
   const handleAdd = () => {
@@ -97,7 +101,7 @@ export default function ProductDetail() {
     '@type': 'Product',
     name: product.name,
     description: product.description,
-    image: product.image,
+    image: mainImage,
     sku: product.sku,
     brand: { '@type': 'Brand', name: product.brand },
     aggregateRating: product.reviewCount > 0 ? {
@@ -126,7 +130,27 @@ export default function ProductDetail() {
         <div className="product-detail-grid">
           <div className="product-detail-image">
             {product.onSale && <span className="badge-sale large">מבצע</span>}
-            <img src={product.image} alt={product.name} />
+            <img src={mainImage} alt={product.name} className="product-gallery-main" />
+            {gallery.length > 1 && (
+              <div className="product-gallery-thumbs">
+                {gallery.map((src, i) => (
+                  <button
+                    key={src + i}
+                    type="button"
+                    className={i === activeImage ? 'active' : ''}
+                    onClick={() => setActiveImage(i)}
+                  >
+                    <img src={src} alt="" />
+                  </button>
+                ))}
+              </div>
+            )}
+            {product.videoUrl && (
+              <div className="product-video">
+                <h3>סרטון מוצר</h3>
+                <video src={product.videoUrl} controls playsInline preload="metadata" />
+              </div>
+            )}
           </div>
           <div className="product-detail-info">
             <span className="product-brand">{product.brand}</span>

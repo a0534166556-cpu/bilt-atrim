@@ -151,6 +151,8 @@ async function migrateProductCjColumns() {
   const cols = [
     ['cj_pid', 'VARCHAR(100) DEFAULT NULL'],
     ['cj_sku', 'VARCHAR(100) DEFAULT NULL'],
+    ['images', 'JSON NULL'],
+    ['video_url', 'VARCHAR(500) DEFAULT NULL'],
   ];
   for (const [name, def] of cols) {
     try {
@@ -295,7 +297,20 @@ function mapProduct(row) {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
     cjPid: row.cj_pid || null,
     cjSku: row.cj_sku || null,
+    images: parseImagesColumn(row.images, row.image),
+    videoUrl: row.video_url || '',
   };
+}
+
+function parseImagesColumn(imagesCol, fallbackImage) {
+  if (!imagesCol) return fallbackImage ? [fallbackImage] : [];
+  try {
+    const parsed = typeof imagesCol === 'string' ? JSON.parse(imagesCol) : imagesCol;
+    if (Array.isArray(parsed) && parsed.length) return parsed;
+  } catch {
+    /* ignore */
+  }
+  return fallbackImage ? [fallbackImage] : [];
 }
 
 export function getEffectivePrice(p) {
@@ -387,16 +402,18 @@ export async function addReview(productId, { name, rating, comment }) {
 }
 
 export async function createProduct(body) {
+  const images = body.images?.length ? body.images : body.image ? [body.image] : [];
+  const mainImage = images[0] || body.image || '';
   const [result] = await pool.query(
-    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku, images, video_url)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.sku || `SKU-${Date.now()}`,
       body.name,
       body.description || '',
       Number(body.price),
       body.salePrice ? Number(body.salePrice) : null,
-      body.image || '',
+      mainImage,
       body.brand || '',
       body.category,
       body.googleCategory || '',
@@ -406,6 +423,8 @@ export async function createProduct(body) {
       body.active !== false ? 1 : 0,
       body.cjPid || null,
       body.cjSku || null,
+      images.length ? JSON.stringify(images) : null,
+      body.videoUrl || null,
     ]
   );
   return getProductById(result.insertId);
@@ -419,26 +438,31 @@ export async function getProductByCjPid(cjPid) {
 export async function importCjProductsToStore(cjItems, categoryId) {
   const results = [];
   for (const item of cjItems) {
-    const existingId = await getProductByCjPid(item.pid);
-    if (existingId) {
-      results.push({ pid: item.pid, status: 'exists', productId: existingId });
-      continue;
-    }
-    const product = await createProduct({
+    const images = item.images?.length ? item.images : item.image ? [item.image] : [];
+    const payload = {
       sku: (item.sku || `CJ-${String(item.pid).slice(0, 8)}`).slice(0, 80),
       name: item.name.slice(0, 200),
-      description: (item.description || item.name).slice(0, 5000),
+      description: (item.description || item.name).slice(0, 8000),
       price: item.retail,
-      image: item.image || '',
+      image: images[0] || '',
+      images,
+      videoUrl: item.videoUrl || '',
       brand: 'CJ Dropshipping',
       category: categoryId,
-      googleCategory: 'Apparel & Accessories',
+      googleCategory: 'Electronics',
       stock: item.stock || 99,
       featured: false,
       active: true,
       cjPid: item.pid,
       cjSku: item.sku || '',
-    });
+    };
+    const existingId = await getProductByCjPid(item.pid);
+    if (existingId) {
+      await updateProduct(existingId, payload);
+      results.push({ pid: item.pid, status: 'updated', productId: existingId });
+      continue;
+    }
+    const product = await createProduct(payload);
     results.push({ pid: item.pid, status: 'imported', productId: product.id });
   }
   return results;
@@ -447,15 +471,24 @@ export async function importCjProductsToStore(cjItems, categoryId) {
 export async function updateProduct(id, body) {
   const existing = await getProductById(id);
   if (!existing) return null;
+  const images =
+    body.images != null
+      ? body.images
+      : existing.images?.length
+        ? existing.images
+        : existing.image
+          ? [existing.image]
+          : [];
+  const mainImage = images[0] || (body.image ?? existing.image);
   await pool.query(
-    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=? WHERE id=?`,
+    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=?, images=?, video_url=? WHERE id=?`,
     [
       body.sku ?? existing.sku,
       body.name ?? existing.name,
       body.description ?? existing.description,
       body.price != null ? Number(body.price) : existing.price,
       body.salePrice != null ? (body.salePrice ? Number(body.salePrice) : null) : existing.salePrice,
-      body.image ?? existing.image,
+      mainImage,
       body.brand ?? existing.brand,
       body.category ?? existing.category,
       body.googleCategory ?? existing.googleCategory,
@@ -463,6 +496,8 @@ export async function updateProduct(id, body) {
       body.gtin ?? existing.gtin,
       body.featured != null ? (body.featured ? 1 : 0) : existing.featured ? 1 : 0,
       body.active != null ? (body.active ? 1 : 0) : existing.active ? 1 : 0,
+      images.length ? JSON.stringify(images) : null,
+      body.videoUrl != null ? body.videoUrl || null : existing.videoUrl || null,
       id,
     ]
   );

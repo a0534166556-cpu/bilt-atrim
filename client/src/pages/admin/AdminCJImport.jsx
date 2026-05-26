@@ -4,6 +4,8 @@ import {
   adminCjStatus,
   adminCjSearch,
   adminCjImport,
+  adminCjMyProducts,
+  adminCjSyncMy,
   fetchCategories,
   formatPrice,
 } from '../../api';
@@ -14,17 +16,55 @@ export default function AdminCJImport() {
   const [configured, setConfigured] = useState(null);
   const [keyword, setKeyword] = useState('');
   const [results, setResults] = useState([]);
+  const [myProducts, setMyProducts] = useState([]);
   const [selected, setSelected] = useState(new Set());
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState('electronics');
   const [markup, setMarkup] = useState(30);
   const [loading, setLoading] = useState(false);
+  const [loadingMy, setLoadingMy] = useState(false);
   const [importing, setImporting] = useState(false);
+  const [syncing, setSyncing] = useState(false);
 
   useEffect(() => {
     adminCjStatus().then((s) => setConfigured(s.configured)).catch(() => setConfigured(false));
     fetchCategories().then(setCategories).catch(() => {});
   }, []);
+
+  const loadMyProducts = async () => {
+    setLoadingMy(true);
+    try {
+      const data = await adminCjMyProducts();
+      setMyProducts(data.list || []);
+      if (!data.list?.length) {
+        showToast('אין מוצרים – לחץ Added על מוצרים באתר CJ קודם', 'error');
+      }
+    } catch (err) {
+      showToast(err.message, 'error');
+      setMyProducts([]);
+    } finally {
+      setLoadingMy(false);
+    }
+  };
+
+  const syncAllFromCj = async () => {
+    setSyncing(true);
+    try {
+      const data = await adminCjSyncMy({ markupPercent: markup, categoryId });
+      if (data.synced === 0 && data.message) {
+        showToast(data.message, 'error');
+        return;
+      }
+      showToast(
+        `סונכרנו ${data.synced} מוצרים (${data.imported || 0} חדשים, ${data.updated || 0} עודכנו) – כולל תמונות וסרטונים`
+      );
+      await loadMyProducts();
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   const search = async (e) => {
     e?.preventDefault();
@@ -64,7 +104,9 @@ export default function AdminCJImport() {
     setImporting(true);
     try {
       const data = await adminCjImport([...selected], { markupPercent: markup, categoryId });
-      showToast(`יובאו ${data.imported} מוצרים (${data.exists} כבר היו בחנות)`);
+      showToast(
+        `יובאו ${data.imported} מוצרים${data.updated ? `, עודכנו ${data.updated}` : ''}`
+      );
       setSelected(new Set());
     } catch (err) {
       showToast(err.message, 'error');
@@ -92,6 +134,58 @@ export default function AdminCJImport() {
         </div>
       ) : (
         <>
+          <div className="cj-sync-hero info-card">
+            <h2>המוצרים שלי ב-CJ → האתר שלך</h2>
+            <p>
+              ב-<strong>CJ Dropshipping</strong> לחץ <strong>Added</strong> על המוצרים שאתה רוצה למכור.
+              אחר כך כאן לחץ <strong>סנכרן הכל לאתר</strong> – המוצרים יעלו אוטומטית עם תמונות, גלריה וסרטון.
+            </p>
+            <div className="cj-import-options">
+              <label>
+                אחוז רווח (%)
+                <input
+                  type="number"
+                  min="5"
+                  max="500"
+                  value={markup}
+                  onChange={(e) => setMarkup(Number(e.target.value))}
+                />
+              </label>
+              <label>
+                קטגוריה בחנות
+                <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+                  {categories.map((c) => (
+                    <option key={c.id} value={c.id}>{c.name}</option>
+                  ))}
+                </select>
+              </label>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={loadingMy}
+                onClick={loadMyProducts}
+              >
+                {loadingMy ? 'טוען...' : 'הצג מוצרים מ-CJ'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                disabled={syncing}
+                onClick={syncAllFromCj}
+              >
+                {syncing ? 'מסנכרן...' : 'סנכרן הכל לאתר'}
+              </button>
+            </div>
+            {myProducts.length > 0 && (
+              <p className="cj-my-count">
+                {myProducts.length} מוצרים ממתינים ב-CJ (לחץ סנכרן כדי להעלות לאתר)
+              </p>
+            )}
+          </div>
+
+          <hr className="cj-divider" />
+
+          <h3>חיפוש נוסף ב-CJ</h3>
           <form className="cj-search-bar" onSubmit={search}>
             <input
               type="search"
@@ -104,35 +198,6 @@ export default function AdminCJImport() {
             </button>
           </form>
 
-          <div className="cj-import-options">
-            <label>
-              אחוז רווח (%)
-              <input
-                type="number"
-                min="5"
-                max="500"
-                value={markup}
-                onChange={(e) => setMarkup(Number(e.target.value))}
-              />
-            </label>
-            <label>
-              קטגוריה בחנות
-              <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-                {categories.map((c) => (
-                  <option key={c.id} value={c.id}>{c.name}</option>
-                ))}
-              </select>
-            </label>
-            <button
-              type="button"
-              className="btn btn-primary"
-              disabled={importing || !selected.size}
-              onClick={doImport}
-            >
-              {importing ? 'מייבא...' : `ייבא ${selected.size} מוצרים לחנות`}
-            </button>
-          </div>
-
           {results.length > 0 && (
             <>
               <div className="admin-toolbar">
@@ -140,6 +205,14 @@ export default function AdminCJImport() {
                   {selected.size === results.length ? 'בטל הכל' : 'בחר הכל'}
                 </button>
                 <span>{results.length} תוצאות</span>
+                <button
+                  type="button"
+                  className="btn btn-primary btn-sm"
+                  disabled={importing || !selected.size}
+                  onClick={doImport}
+                >
+                  {importing ? 'מייבא...' : `ייבא ${selected.size} נבחרים`}
+                </button>
               </div>
               <div className="cj-results-grid">
                 {results.map((p) => {

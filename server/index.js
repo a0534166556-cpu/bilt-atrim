@@ -37,7 +37,13 @@ import {
   importCjProductsToStore,
 } from './db.js';
 import { buildOrderFromBody } from './orderBuild.js';
-import { isCjConfigured, searchCjProducts, importCjProducts } from './cj.js';
+import {
+  isCjConfigured,
+  searchCjProducts,
+  importCjProducts,
+  getMyCjProducts,
+  syncMyCjProductsToStore,
+} from './cj.js';
 import {
   getPaymentConfig,
   createStripeCheckoutSession,
@@ -538,10 +544,52 @@ app.post(
     const results = await importCjProductsToStore(imported, categoryId);
     res.status(201).json({
       imported: results.filter((r) => r.status === 'imported').length,
-      exists: results.filter((r) => r.status === 'exists').length,
+      updated: results.filter((r) => r.status === 'updated').length,
       failed: skipped.length,
       details: results,
       errors: skipped,
+    });
+  })
+);
+
+app.get(
+  '/api/admin/cj/my-products',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { page = '1', size = '50' } = req.query;
+    const result = await getMyCjProducts(Number(page) || 1, Number(size) || 50);
+    res.json(result);
+  })
+);
+
+app.post(
+  '/api/admin/cj/sync-my',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { markupPercent = 30, categoryId = 'electronics' } = req.body || {};
+    const { myProducts, imported, skipped, message } = await syncMyCjProductsToStore({
+      markupPercent: Number(markupPercent) || 30,
+      categoryId,
+    });
+    if (!myProducts.length) {
+      return res.json({ synced: 0, message, myProducts: [], errors: [] });
+    }
+    const results = await importCjProductsToStore(imported, categoryId);
+    res.status(201).json({
+      synced: results.length,
+      imported: results.filter((r) => r.status === 'imported').length,
+      updated: results.filter((r) => r.status === 'updated').length,
+      failed: skipped.length,
+      myProductsCount: myProducts.length,
+      details: results,
+      errors: skipped,
+      message: message || null,
     });
   })
 );
