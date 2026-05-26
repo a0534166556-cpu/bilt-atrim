@@ -478,9 +478,28 @@ img {
   margin-bottom: 1.5rem;
 }
 
-.product-desc-block .translate-btn {
-  margin-top: 0.5rem;
-  margin-left: 0.5rem;
+.product-translate-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin: 0.75rem 0 1rem;
+}
+
+.product-translate-row .translate-btn {
+  flex-shrink: 0;
+}
+
+.translate-hint {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  width: 100%;
+}
+
+@media (min-width: 520px) {
+  .translate-hint {
+    width: auto;
+  }
 }
 
 .product-desc-html {

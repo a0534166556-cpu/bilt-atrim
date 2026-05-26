@@ -202,30 +202,37 @@ export default function ProductDetail() {
                 אתה חוסך {formatPrice(product.price - product.effectivePrice)}!
               </p>
             )}
+            {(showTranslate || displayDesc) && (
+              <div className="product-translate-row">
+                {showTranslate && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm translate-btn"
+                    disabled={translating}
+                    onClick={handleTranslate}
+                  >
+                    {translating ? 'מתרגם...' : 'תרגם לעברית'}
+                  </button>
+                )}
+                {displayDesc && (
+                  <button
+                    type="button"
+                    className="btn btn-outline btn-sm translate-btn"
+                    onClick={() => {
+                      setDisplayDesc(null);
+                      setDisplayName(null);
+                    }}
+                  >
+                    הצג מקור (אנגלית)
+                  </button>
+                )}
+                {showTranslate && (
+                  <span className="translate-hint">תצוגה בלבד — לשמירה: ניהול → ייבוא CJ → סנכרן עם תרגום</span>
+                )}
+              </div>
+            )}
             <div className="product-desc-block">
               <ProductDescription content={productDescription} plain={Boolean(displayDesc)} />
-              {showTranslate && (
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm translate-btn"
-                  disabled={translating}
-                  onClick={handleTranslate}
-                >
-                  {translating ? 'מתרגם...' : 'תרגם לעברית'}
-                </button>
-              )}
-              {displayDesc && (
-                <button
-                  type="button"
-                  className="btn btn-outline btn-sm translate-btn"
-                  onClick={() => {
-                    setDisplayDesc(null);
-                    setDisplayName(null);
-                  }}
-                >
-                  הצג מקור (אנגלית)
-                </button>
-              )}
             </div>
             <p className={`stock-info ${outOfStock ? 'out' : product.stock < 5 ? 'low' : ''}`}>
               {outOfStock ? 'אזל מהמלאי' : `במלאי: ${product.stock} יחידות`}
