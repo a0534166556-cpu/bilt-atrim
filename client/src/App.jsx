@@ -21,6 +21,7 @@ import AdminProductForm from './pages/admin/AdminProductForm';
 import AdminOrders from './pages/admin/AdminOrders';
 import AdminSettings from './pages/admin/AdminSettings';
 import AdminCoupons from './pages/admin/AdminCoupons';
+import AdminCJImport from './pages/admin/AdminCJImport';
 import NotFound from './pages/NotFound';
 
 export default function App() {
@@ -87,6 +88,14 @@ export default function App() {
           element={
             <ProtectedAdmin>
               <AdminCoupons />
+            </ProtectedAdmin>
+          }
+        />
+        <Route
+          path="/admin/cj"
+          element={
+            <ProtectedAdmin>
+              <AdminCJImport />
             </ProtectedAdmin>
           }
         />

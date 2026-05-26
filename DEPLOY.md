@@ -22,6 +22,7 @@ Railway יוסיף אוטומטית:
 | `NODE_ENV` | `production` |
 | `STRIPE_SECRET_KEY` | מפתח סודי מ-[Stripe Dashboard](https://dashboard.stripe.com/apikeys) |
 | `STRIPE_WEBHOOK_SECRET` | מ-Webhook (ראה למטה) |
+| `CJ_ACCESS_TOKEN` | מפתח API מ-CJ: My CJ → Authorization → API |
 
 **אל תגדיר ידנית** את MYSQL* – Railway מחבר אותם מה-Database.
 

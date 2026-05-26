@@ -7,38 +7,29 @@ import FreeShippingBar from '../components/FreeShippingBar';
 
 export default function Cart() {
   const { items, updateQuantity, removeItem, total, syncWithCatalog } = useCart();
-  const [loading, setLoading] = useState(items.length > 0);
+  const [syncing, setSyncing] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
-    if (items.length === 0) {
-      setLoading(false);
-      return;
-    }
+    if (items.length === 0) return;
     let cancelled = false;
+    setSyncing(true);
     fetchProducts()
       .then((products) => {
         if (!cancelled) syncWithCatalog(products);
       })
       .catch(() => {
-        if (!cancelled) setError('לא הצלחנו לעדכן מחירים – אפשר להמשיך לתשלום');
+        if (!cancelled) {
+          setError('לא הצלחנו לעדכן מחירים – אפשר להמשיך לתשלום');
+        }
       })
       .finally(() => {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) setSyncing(false);
       });
     return () => {
       cancelled = true;
     };
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps -- sync once on mount
-
-  if (loading && items.length > 0) {
-    return (
-      <div className="container page">
-        <Helmet><title>סל קניות | מרקט גוגל</title></Helmet>
-        <p className="loading">מעדכן סל...</p>
-      </div>
-    );
-  }
+  }, [items.length, syncWithCatalog]);
 
   if (items.length === 0) {
     return (
@@ -51,47 +42,52 @@ export default function Cart() {
     );
   }
 
+  const itemCount = items.reduce((s, i) => s + (Number(i.quantity) || 0), 0);
+
   return (
     <>
-      <Helmet><title>סל קניות ({items.length}) | מרקט גוגל</title></Helmet>
-      <div className="container page">
+      <Helmet><title>סל קניות ({itemCount}) | מרקט גוגל</title></Helmet>
+      <div className="container page cart-page">
         <h1>סל קניות</h1>
+        {syncing && <p className="loading-inline">מעדכן מחירים...</p>}
         {error && <p className="error-banner">{error}</p>}
 
         <div className="cart-layout">
           <div className="cart-items">
             {items.map((item) => {
               const unitPrice = Number(item.effectivePrice ?? item.price) || 0;
-              const atMax = item.quantity >= (item.stock ?? 99);
+              const qty = Number(item.quantity) || 1;
+              const stock = Number(item.stock) || 99;
+              const atMax = qty >= stock;
               return (
                 <div key={item.id} className="cart-item">
                   <Link to={`/product/${item.id}`} className="cart-item-image">
                     {item.image ? (
-                      <img src={item.image} alt={item.name} />
+                      <img src={item.image} alt={item.name || 'מוצר'} />
                     ) : (
                       <div className="cart-no-image">📦</div>
                     )}
                   </Link>
                   <div className="cart-item-info">
                     <Link to={`/product/${item.id}`}>
-                      <h3>{item.name}</h3>
+                      <h3>{item.name || 'מוצר'}</h3>
                     </Link>
                     <p className="cart-unit-price">{formatPrice(unitPrice)}</p>
-                    {item.stock < 10 && (
-                      <small className="stock-hint">נותרו {item.stock} במלאי</small>
+                    {stock > 0 && stock < 10 && (
+                      <small className="stock-hint">נותרו {stock} במלאי</small>
                     )}
                     <div className="cart-item-actions">
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.id, item.quantity - 1)}
+                        onClick={() => updateQuantity(item.id, qty - 1)}
                         aria-label="הפחת כמות"
                       >
                         −
                       </button>
-                      <span>{item.quantity}</span>
+                      <span>{qty}</span>
                       <button
                         type="button"
-                        onClick={() => updateQuantity(item.id, item.quantity + 1)}
+                        onClick={() => updateQuantity(item.id, qty + 1)}
                         disabled={atMax}
                         aria-label="הוסף כמות"
                       >
@@ -106,7 +102,7 @@ export default function Cart() {
                       </button>
                     </div>
                   </div>
-                  <p className="cart-item-total">{formatPrice(unitPrice * item.quantity)}</p>
+                  <p className="cart-item-total">{formatPrice(unitPrice * qty)}</p>
                 </div>
               );
             })}
@@ -116,7 +112,7 @@ export default function Cart() {
             <h2>סיכום הזמנה</h2>
             <FreeShippingBar subtotal={total} />
             <div className="summary-row">
-              <span>פריטים ({items.reduce((s, i) => s + i.quantity, 0)})</span>
+              <span>פריטים ({itemCount})</span>
               <span>{formatPrice(total)}</span>
             </div>
             <p className="cart-summary-note">משלוח יחושב בשלב הבא</p>

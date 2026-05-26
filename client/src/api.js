@@ -164,6 +164,22 @@ export async function adminDuplicateProduct(id) {
   return request(`${API}/admin/products/${id}/duplicate`, { method: 'POST' });
 }
 
+export async function adminCjStatus() {
+  return request(`${API}/admin/cj/status`);
+}
+
+export async function adminCjSearch(q, page = 1) {
+  const params = new URLSearchParams({ q, page: String(page), size: '20' });
+  return request(`${API}/admin/cj/search?${params}`);
+}
+
+export async function adminCjImport(pids, { markupPercent, categoryId }) {
+  return request(`${API}/admin/cj/import`, {
+    method: 'POST',
+    body: JSON.stringify({ pids, markupPercent, categoryId }),
+  });
+}
+
 
 export function formatPrice(price) {
   const n = Number(price);

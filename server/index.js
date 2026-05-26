@@ -34,8 +34,10 @@ import {
   getAdminSession,
   cleanExpiredSessions,
   getEffectivePrice,
+  importCjProductsToStore,
 } from './db.js';
 import { buildOrderFromBody } from './orderBuild.js';
+import { isCjConfigured, searchCjProducts, importCjProducts } from './cj.js';
 import {
   getPaymentConfig,
   createStripeCheckoutSession,
@@ -494,6 +496,53 @@ app.put(
   requireAdmin,
   asyncHandler(async (req, res) => {
     res.json(await updateStore(req.body));
+  })
+);
+
+app.get(
+  '/api/admin/cj/status',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    res.json({ configured: isCjConfigured() });
+  })
+);
+
+app.get(
+  '/api/admin/cj/search',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { q = '', page = '1', size = '20' } = req.query;
+    const result = await searchCjProducts(String(q), Number(page) || 1, Number(size) || 20);
+    res.json(result);
+  })
+);
+
+app.post(
+  '/api/admin/cj/import',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { pids, markupPercent = 30, categoryId = 'electronics' } = req.body;
+    if (!Array.isArray(pids) || !pids.length) {
+      return res.status(400).json({ error: 'בחר מוצרים לייבוא' });
+    }
+    const { imported, skipped } = await importCjProducts(pids, {
+      markupPercent: Number(markupPercent) || 30,
+      categoryId,
+    });
+    const results = await importCjProductsToStore(imported, categoryId);
+    res.status(201).json({
+      imported: results.filter((r) => r.status === 'imported').length,
+      exists: results.filter((r) => r.status === 'exists').length,
+      failed: skipped.length,
+      details: results,
+      errors: skipped,
+    });
   })
 );
 

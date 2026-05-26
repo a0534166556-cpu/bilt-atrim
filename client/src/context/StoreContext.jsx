@@ -14,5 +14,7 @@ export function StoreProvider({ children }) {
 }
 
 export function useStore() {
-  return useContext(StoreContext);
+  const ctx = useContext(StoreContext);
+  if (!ctx) return { store: null, setStore: () => {} };
+  return ctx;
 }

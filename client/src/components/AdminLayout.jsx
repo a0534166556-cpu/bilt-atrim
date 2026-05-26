@@ -7,6 +7,7 @@ const links = [
   { to: '/admin/products/new', label: 'הוסף מוצר', exact: true },
   { to: '/admin/orders', label: 'הזמנות' },
   { to: '/admin/coupons', label: 'קופונים' },
+  { to: '/admin/cj', label: 'ייבוא CJ' },
   { to: '/admin/settings', label: 'הגדרות חנות' },
 ];
 

@@ -142,10 +142,25 @@ export async function initDb() {
 
   await migrateOrderPaymentColumns();
   await migrateStorePromoColumns();
+  await migrateProductCjColumns();
 
   const [[{ c }]] = await pool.query('SELECT COUNT(*) AS c FROM products');
   if (c === 0) await seedFromJson();
   else await ensureStore();
+}
+
+async function migrateProductCjColumns() {
+  const cols = [
+    ['cj_pid', 'VARCHAR(100) DEFAULT NULL'],
+    ['cj_sku', 'VARCHAR(100) DEFAULT NULL'],
+  ];
+  for (const [name, def] of cols) {
+    try {
+      await pool.query(`ALTER TABLE products ADD COLUMN ${name} ${def}`);
+    } catch (e) {
+      if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+    }
+  }
 }
 
 async function migrateStorePromoColumns() {
@@ -280,6 +295,8 @@ function mapProduct(row) {
     featured: !!row.featured,
     active: !!row.active,
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
+    cjPid: row.cj_pid || null,
+    cjSku: row.cj_sku || null,
   };
 }
 
@@ -373,8 +390,8 @@ export async function addReview(productId, { name, rating, comment }) {
 
 export async function createProduct(body) {
   const [result] = await pool.query(
-    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.sku || `SKU-${Date.now()}`,
       body.name,
@@ -389,9 +406,44 @@ export async function createProduct(body) {
       body.gtin || '',
       body.featured ? 1 : 0,
       body.active !== false ? 1 : 0,
+      body.cjPid || null,
+      body.cjSku || null,
     ]
   );
   return getProductById(result.insertId);
+}
+
+export async function getProductByCjPid(cjPid) {
+  const [[row]] = await pool.query('SELECT id FROM products WHERE cj_pid = ?', [cjPid]);
+  return row ? Number(row.id) : null;
+}
+
+export async function importCjProductsToStore(cjItems, categoryId) {
+  const results = [];
+  for (const item of cjItems) {
+    const existingId = await getProductByCjPid(item.pid);
+    if (existingId) {
+      results.push({ pid: item.pid, status: 'exists', productId: existingId });
+      continue;
+    }
+    const product = await createProduct({
+      sku: (item.sku || `CJ-${String(item.pid).slice(0, 8)}`).slice(0, 80),
+      name: item.name.slice(0, 200),
+      description: (item.description || item.name).slice(0, 5000),
+      price: item.retail,
+      image: item.image || '',
+      brand: 'CJ Dropshipping',
+      category: categoryId,
+      googleCategory: 'Apparel & Accessories',
+      stock: item.stock || 99,
+      featured: false,
+      active: true,
+      cjPid: item.pid,
+      cjSku: item.sku || '',
+    });
+    results.push({ pid: item.pid, status: 'imported', productId: product.id });
+  }
+  return results;
 }
 
 export async function updateProduct(id, body) {
