@@ -176,6 +176,10 @@ export default function AdminCJImport() {
               ב-<strong>CJ Dropshipping</strong> לחץ <strong>Added</strong> על המוצרים שאתה רוצה למכור.
               אחר כך כאן לחץ <strong>סנכרן הכל לאתר</strong> – המוצרים יעלו אוטומטית עם תמונות, גלריה וסרטון.
             </p>
+            <p className="cj-price-hint">
+              <strong>מחיר באתר:</strong> עלות CJ (למשל $1.72) + {markup}% רווח → בשקלים.
+              משלוח ללקוח נגבה <strong>בנפרד בקופה (₪29)</strong> – לא בתוך מחיר המוצר.
+            </p>
             <div className="cj-import-options">
               <label>
                 אחוז רווח (%)

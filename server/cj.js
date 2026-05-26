@@ -398,13 +398,14 @@ export function clearMyProductPriceCache() {
   myProductPriceCache = null;
 }
 
-/** מחיר ישן / שגוי במסד */
+/** מחיר ישן / שגוי במסד (כולל נוסחה ישנה עם משלוח כפול) */
 export function isLikelyStaleCjPrice(price, markupPercent = 30) {
   const n = Number(price);
   if (!Number.isFinite(n) || n <= 0) return true;
-  if (n < 15) return true;
+  if (n < 8) return true;
   const fallback = getDefaultFallbackRetailIls(markupPercent);
   if (fallback != null && n === fallback) return true;
+  if (n >= 18 && n <= 30) return true;
   return false;
 }
 

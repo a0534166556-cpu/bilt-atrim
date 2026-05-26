@@ -557,6 +557,13 @@ img {
   color: var(--text-muted);
 }
 
+.cj-price-hint {
+  font-size: 0.9rem;
+  color: var(--text-muted);
+  margin: 0.5rem 0 0;
+  line-height: 1.5;
+}
+
 .cj-translate-check {
   flex-direction: row !important;
   align-items: center;
