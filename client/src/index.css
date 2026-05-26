@@ -732,6 +732,13 @@ img {
   margin-bottom: 0.5rem;
 }
 
+.order-email-hint,
+.track-hint {
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  margin-top: 0.5rem;
+}
+
 .order-success p {
   margin-bottom: 0.5rem;
   color: var(--text-muted);

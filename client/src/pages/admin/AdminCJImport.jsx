@@ -55,8 +55,11 @@ export default function AdminCJImport() {
         showToast(data.message, 'error');
         return;
       }
+      const failed = data.failed || 0;
       showToast(
-        `סונכרנו ${data.synced} מוצרים (${data.imported || 0} חדשים, ${data.updated || 0} עודכנו) – כולל תמונות וסרטונים`
+        failed
+          ? `סונכרנו ${data.synced} מוצרים, ${failed} נכשלו`
+          : `סונכרנו ${data.synced} מוצרים (${data.imported || 0} חדשים, ${data.updated || 0} עודכנו)`
       );
       await loadMyProducts();
     } catch (err) {

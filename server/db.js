@@ -302,6 +302,15 @@ function mapProduct(row) {
   };
 }
 
+function safeNumber(value, fallback = 0) {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : fallback;
+}
+
+function safePrice(value, min = 1) {
+  return Math.max(min, safeNumber(value, min));
+}
+
 function parseImagesColumn(imagesCol, fallbackImage) {
   if (!imagesCol) return fallbackImage ? [fallbackImage] : [];
   try {
@@ -417,7 +426,7 @@ export async function createProduct(body) {
       body.brand || '',
       body.category,
       body.googleCategory || '',
-      Number(body.stock) || 0,
+      Math.max(0, Math.floor(safeNumber(body.stock, 0))),
       body.gtin || '',
       body.featured ? 1 : 0,
       body.active !== false ? 1 : 0,
@@ -431,39 +440,51 @@ export async function createProduct(body) {
 }
 
 export async function getProductByCjPid(cjPid) {
-  const [[row]] = await pool.query('SELECT id FROM products WHERE cj_pid = ?', [cjPid]);
+  if (cjPid == null || cjPid === '') return null;
+  const [[row]] = await pool.query('SELECT id FROM products WHERE cj_pid = ?', [String(cjPid)]);
   return row ? Number(row.id) : null;
 }
 
 export async function importCjProductsToStore(cjItems, categoryId) {
   const results = [];
+  const cat = categoryId && String(categoryId) !== 'NaN' ? String(categoryId) : 'electronics';
+
   for (const item of cjItems) {
-    const images = item.images?.length ? item.images : item.image ? [item.image] : [];
-    const payload = {
-      sku: (item.sku || `CJ-${String(item.pid).slice(0, 8)}`).slice(0, 80),
-      name: item.name.slice(0, 200),
-      description: (item.description || item.name).slice(0, 8000),
-      price: item.retail,
-      image: images[0] || '',
-      images,
-      videoUrl: item.videoUrl || '',
-      brand: 'CJ Dropshipping',
-      category: categoryId,
-      googleCategory: 'Electronics',
-      stock: item.stock || 99,
-      featured: false,
-      active: true,
-      cjPid: item.pid,
-      cjSku: item.sku || '',
-    };
-    const existingId = await getProductByCjPid(item.pid);
-    if (existingId) {
-      await updateProduct(existingId, payload);
-      results.push({ pid: item.pid, status: 'updated', productId: existingId });
+    if (!item?.pid) {
+      results.push({ pid: null, status: 'failed', error: 'חסר מזהה מוצר מ-CJ' });
       continue;
     }
-    const product = await createProduct(payload);
-    results.push({ pid: item.pid, status: 'imported', productId: product.id });
+    try {
+      const images = item.images?.length ? item.images : item.image ? [item.image] : [];
+      const name = String(item.name || 'מוצר CJ').slice(0, 200);
+      const payload = {
+        sku: (item.sku || `CJ-${String(item.pid).slice(0, 8)}`).slice(0, 80),
+        name,
+        description: String(item.description || name).slice(0, 8000),
+        price: safePrice(item.retail ?? item.price, 1),
+        image: images[0] || '',
+        images,
+        videoUrl: item.videoUrl || '',
+        brand: 'CJ Dropshipping',
+        category: cat,
+        googleCategory: 'Electronics',
+        stock: Math.max(0, Math.floor(safeNumber(item.stock, 99))),
+        featured: false,
+        active: true,
+        cjPid: String(item.pid),
+        cjSku: String(item.sku || ''),
+      };
+      const existingId = await getProductByCjPid(item.pid);
+      if (existingId) {
+        await updateProduct(existingId, payload);
+        results.push({ pid: item.pid, status: 'updated', productId: existingId });
+        continue;
+      }
+      const product = await createProduct(payload);
+      results.push({ pid: item.pid, status: 'imported', productId: product.id });
+    } catch (err) {
+      results.push({ pid: item.pid, status: 'failed', error: err.message });
+    }
   }
   return results;
 }
@@ -486,13 +507,17 @@ export async function updateProduct(id, body) {
       body.sku ?? existing.sku,
       body.name ?? existing.name,
       body.description ?? existing.description,
-      body.price != null ? Number(body.price) : existing.price,
-      body.salePrice != null ? (body.salePrice ? Number(body.salePrice) : null) : existing.salePrice,
+      body.price != null ? safePrice(body.price, 1) : existing.price,
+      body.salePrice != null
+        ? body.salePrice
+          ? safePrice(body.salePrice, 1)
+          : null
+        : existing.salePrice,
       mainImage,
       body.brand ?? existing.brand,
       body.category ?? existing.category,
       body.googleCategory ?? existing.googleCategory,
-      body.stock != null ? Number(body.stock) : existing.stock,
+      body.stock != null ? Math.max(0, Math.floor(safeNumber(body.stock, 0))) : existing.stock,
       body.gtin ?? existing.gtin,
       body.featured != null ? (body.featured ? 1 : 0) : existing.featured ? 1 : 0,
       body.active != null ? (body.active ? 1 : 0) : existing.active ? 1 : 0,
@@ -745,7 +770,7 @@ export async function confirmOrderPayment(orderId, stripeSessionId) {
     if (!order) throw new Error('הזמנה לא נמצאה');
     if (order.payment_status === 'paid') {
       await conn.commit();
-      return orderId;
+      return { orderId, newlyConfirmed: false };
     }
     if (order.status !== 'awaiting_payment') {
       throw new Error('הזמנה לא ממתינה לתשלום');
@@ -770,7 +795,7 @@ export async function confirmOrderPayment(orderId, stripeSessionId) {
     ]);
 
     await conn.commit();
-    return orderId;
+    return { orderId, newlyConfirmed: true };
   } catch (e) {
     await conn.rollback();
     throw e;

@@ -36,6 +36,9 @@ export default function OrderSuccess() {
       {!sessionId && (
         <p>שמרו את המספר – תוכלו לעקוב אחרי ההזמנה בדף מעקב הזמנה.</p>
       )}
+      <p className="order-email-hint">
+        אישור ההזמנה ומספר ההזמנה נשלחו גם לכתובת האימייל שהזנתם בתשלום.
+      </p>
       <div className="success-actions">
         <Link to="/track-order" className="btn btn-outline">מעקב הזמנה</Link>
         <Link to="/" className="btn btn-primary">חזרה לחנות</Link>

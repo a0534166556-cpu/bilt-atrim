@@ -23,8 +23,18 @@ Railway יוסיף אוטומטית:
 | `STRIPE_SECRET_KEY` | מפתח סודי מ-[Stripe Dashboard](https://dashboard.stripe.com/apikeys) |
 | `STRIPE_WEBHOOK_SECRET` | מ-Webhook (ראה למטה) |
 | `CJ_ACCESS_TOKEN` | מפתח API מ-CJ (פורמט `CJxxx@api@...`) – השרת ממיר אוטומטית ל-access token |
+| `RESEND_API_KEY` | מפתח API מ-[Resend](https://resend.com/api-keys) (מיילים ללקוחות) |
+| `EMAIL_FROM` | כתובת שולח מאומתת ב-Resend, למשל `orders@yourdomain.com` |
 
 **אל תגדיר ידנית** את MYSQL* – Railway מחבר אותם מה-Database.
+
+## מיילים ללקוחות (Resend)
+
+1. צור חשבון ב-[resend.com](https://resend.com)
+2. **API Keys** → העתק מפתח ל-`RESEND_API_KEY` ב-Railway
+3. **Domains** → אמת דומיין (או לבדיקות: `onboarding@resend.dev` כ-`EMAIL_FROM`)
+4. Redeploy – אחרי הזמנה הלקוח מקבל מייל עם מספר הזמנה
+5. בדוק: `https://.../api/health` → `"email": true`
 
 ## תשלום בכרטיס אשראי (Stripe)
 

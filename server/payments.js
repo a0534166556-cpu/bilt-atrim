@@ -1,5 +1,6 @@
 import Stripe from 'stripe';
 import { confirmOrderPayment, setOrderStripeSession } from './db.js';
+import { notifyOrderConfirmation } from './email.js';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -83,7 +84,12 @@ export async function handleStripeWebhook(rawBody, signature) {
     const session = event.data.object;
     if (session.payment_status === 'paid') {
       const orderId = Number(session.metadata?.orderId || session.client_reference_id);
-      if (orderId) await confirmOrderPayment(orderId, session.id);
+      if (orderId) {
+        const result = await confirmOrderPayment(orderId, session.id);
+        if (result.newlyConfirmed) {
+          notifyOrderConfirmation(orderId).catch(() => {});
+        }
+      }
     }
   }
   return { received: true };

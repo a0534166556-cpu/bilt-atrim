@@ -36,6 +36,7 @@ import {
   getEffectivePrice,
   importCjProductsToStore,
 } from './db.js';
+import { isEmailConfigured, notifyOrderConfirmation, notifyOrderShipped } from './email.js';
 import { buildOrderFromBody } from './orderBuild.js';
 import {
   isCjConfigured,
@@ -428,6 +429,9 @@ app.patch(
       req.body,
       STOCK_RESTORE_STATUSES
     );
+    if (req.body.trackingNumber && order?.trackingNumber && !existing.trackingNumber) {
+      notifyOrderShipped(order.id).catch(() => {});
+    }
     res.json(order);
   })
 );
@@ -573,19 +577,21 @@ app.post(
       return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
     }
     const { markupPercent = 30, categoryId = 'electronics' } = req.body || {};
+    const cat = String(categoryId || 'electronics');
     const { myProducts, imported, skipped, message } = await syncMyCjProductsToStore({
       markupPercent: Number(markupPercent) || 30,
-      categoryId,
+      categoryId: cat,
     });
     if (!myProducts.length) {
       return res.json({ synced: 0, message, myProducts: [], errors: [] });
     }
-    const results = await importCjProductsToStore(imported, categoryId);
+    const results = await importCjProductsToStore(imported, cat);
+    const dbFailed = results.filter((r) => r.status === 'failed').length;
     res.status(201).json({
-      synced: results.length,
+      synced: results.filter((r) => r.status !== 'failed').length,
       imported: results.filter((r) => r.status === 'imported').length,
       updated: results.filter((r) => r.status === 'updated').length,
-      failed: skipped.length,
+      failed: skipped.length + dbFailed,
       myProductsCount: myProducts.length,
       details: results,
       errors: skipped,
@@ -660,7 +666,12 @@ app.get('/robots.txt', (req, res) => {
 });
 
 app.get('/api/health', (req, res) => {
-  res.json({ ok: true, database: 'mysql', stripe: isStripeEnabled() });
+  res.json({
+    ok: true,
+    database: 'mysql',
+    stripe: isStripeEnabled(),
+    email: isEmailConfigured(),
+  });
 });
 
 app.use((err, req, res, next) => {

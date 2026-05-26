@@ -34,7 +34,10 @@ export default function TrackOrder() {
     <div className="container page track-page">
       <Helmet><title>מעקב הזמנה | מרקט גוגל</title></Helmet>
       <h1>מעקב הזמנה</h1>
-      <p>הזן את מספר ההזמנה והאימייל שבו השתמשת</p>
+      <p>הזן את מספר ההזמנה והאימייל שבו השתמשת בקנייה.</p>
+      <p className="track-hint">
+        מספר ההזמנה נשלח אליך במייל אחרי הרכישה (בדוק גם בתיקיית ספאם).
+      </p>
 
       <form className="track-form" onSubmit={handleSubmit}>
         <label>

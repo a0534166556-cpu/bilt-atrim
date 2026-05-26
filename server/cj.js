@@ -271,11 +271,16 @@ export async function importCjProducts(pids, { markupPercent = 30, categoryId = 
   const imported = [];
   const skipped = [];
 
+  const markup = Number(markupPercent);
+  const validMarkup = Number.isFinite(markup) ? markup : 30;
+
   for (const pid of pids) {
+    if (!pid) continue;
     try {
       const detail = await getCjProductDetail(pid);
-      const cost = detail.price;
-      const retail = Math.ceil(cost * (1 + markupPercent / 100));
+      const cost = Number(detail.price);
+      const validCost = Number.isFinite(cost) && cost > 0 ? cost : 1;
+      const retail = Math.max(1, Math.ceil(validCost * (1 + validMarkup / 100)));
       imported.push({
         ...detail,
         cost,
