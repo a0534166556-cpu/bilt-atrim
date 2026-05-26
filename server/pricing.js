@@ -13,10 +13,16 @@ export function getDefaultShippingUsd() {
   return Number.isFinite(ship) && ship >= 0 ? ship : 4;
 }
 
-/** עלות USD מ-CJ + משלוח USD → מחיר מכירה בש"ח */
+/** מחיר ברירת מחדל כשעלות CJ חסרה (1$ + משלוח) – לזיהוי מחירים שגויים */
+export function getDefaultFallbackRetailIls(markupPercent = 30) {
+  return calculateRetailPriceIls(1, { markupPercent, shippingUsd: getDefaultShippingUsd() });
+}
+
+/** עלות USD מ-CJ + משלוח USD → מחיר מכירה בש"ח (null אם אין עלות) */
 export function calculateRetailPriceIls(costUsd, { markupPercent = 30, shippingUsd } = {}) {
   const cost = Number(costUsd);
-  const validCost = Number.isFinite(cost) && cost > 0 ? cost : 1;
+  if (!Number.isFinite(cost) || cost <= 0) return null;
+
   const ship =
     shippingUsd != null && Number.isFinite(Number(shippingUsd))
       ? Math.max(0, Number(shippingUsd))
@@ -24,11 +30,41 @@ export function calculateRetailPriceIls(costUsd, { markupPercent = 30, shippingU
   const markup = Number(markupPercent);
   const validMarkup = Number.isFinite(markup) ? markup : 30;
 
-  const subtotalUsd = validCost + ship;
+  const subtotalUsd = cost + ship;
   const withProfitUsd = subtotalUsd * (1 + validMarkup / 100);
   const ils = withProfitUsd * getUsdToIlsRate();
 
   return Math.max(5, Math.ceil(ils));
+}
+
+function parseUsd(...values) {
+  const nums = values
+    .flatMap((v) => (Array.isArray(v) ? v : [v]))
+    .map((v) => {
+      if (v == null || v === '') return NaN;
+      const n = Number(String(v).replace(/[^0-9.]/g, ''));
+      return n;
+    })
+    .filter((n) => Number.isFinite(n) && n > 0);
+  return nums.length ? Math.min(...nums) : 0;
+}
+
+/** מחיר עלות USD מ-CJ (variantSellPrice, sellPrice, nowPrice…) */
+export function extractCostUsd(product, variants = []) {
+  const variantFields = variants.flatMap((v) => [
+    v.variantSellPrice,
+    v.variantSugSellPrice,
+    v.sellPrice,
+    v.price,
+  ]);
+  return parseUsd(
+    product?.sellPrice,
+    product?.nowPrice,
+    product?.discountPrice,
+    product?.productSellPrice,
+    product?.productPrice,
+    ...variantFields
+  );
 }
 
 export function extractShippingUsd(product, variants = []) {

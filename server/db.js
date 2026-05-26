@@ -345,18 +345,20 @@ function resolveStorePriceIls(item, markupPercent = 30) {
 
   const costUsd = Number(item.cost ?? item.costUsd);
   if (Number.isFinite(costUsd) && costUsd > 0) {
-    return calculateRetailPriceIls(costUsd, {
+    const fromCost = calculateRetailPriceIls(costUsd, {
       markupPercent,
       shippingUsd: item.shippingUsd,
     });
+    if (fromCost != null) return fromCost;
   }
 
   const raw = Number(item.price);
-  if (Number.isFinite(raw) && raw > 0 && raw < 25) {
-    return calculateRetailPriceIls(raw, {
+  if (Number.isFinite(raw) && raw > 0 && raw < 20) {
+    const fromUsd = calculateRetailPriceIls(raw, {
       markupPercent,
       shippingUsd: item.shippingUsd,
     });
+    if (fromUsd != null) return fromUsd;
   }
 
   return safePrice(item.retail ?? item.price, 5);

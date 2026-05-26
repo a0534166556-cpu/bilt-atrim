@@ -1,5 +1,10 @@
 import { translateProductFields } from './translate.js';
-import { calculateRetailPriceIls, extractShippingUsd } from './pricing.js';
+import {
+  calculateRetailPriceIls,
+  extractShippingUsd,
+  extractCostUsd,
+  getDefaultFallbackRetailIls,
+} from './pricing.js';
 
 const CJ_BASE = 'https://developers.cjdropshipping.com/api2.0/v1';
 
@@ -243,7 +248,7 @@ function collectVideo(p) {
 
 function mapListItem(item) {
   const images = collectImages(item);
-  const price = Number(item.sellPrice ?? item.price ?? item.salePrice ?? 0);
+  const price = extractCostUsd(item, item.variantList || item.variants || []);
   return {
     pid: item.pid || item.productId || item.id,
     sku: item.productSku || item.sku || '',
@@ -316,13 +321,7 @@ export async function getCjProductDetail(pid) {
   const images = collectImages(p);
   const videos = collectVideos(p);
   const videoUrl = videos[0]?.url || '';
-  const sellPrices = variants
-    .map((v) => Number(v.sellPrice ?? v.price))
-    .filter((n) => n > 0);
-  const costUsd =
-    sellPrices.length > 0
-      ? Math.min(...sellPrices)
-      : Number(p.sellPrice ?? p.productSellPrice ?? p.productPrice ?? 0);
+  const costUsd = extractCostUsd(p, variants);
   const shippingUsd = extractShippingUsd(p, variants);
   const stock =
     variants.reduce((sum, v) => sum + (Number(v.inventory ?? v.stock) || 0), 0) || 99;
@@ -351,14 +350,40 @@ export async function getCjProductDetail(pid) {
   };
 }
 
-/** מוצרים עם מחיר ישן (דולר CJ נשמר כ-₪) */
-export function isLikelyStaleCjPrice(price) {
+let myProductPriceCache = null;
+
+async function getMyProductUsdPrice(pid) {
+  if (!myProductPriceCache) {
+    const all = await getAllMyCjProducts();
+    myProductPriceCache = new Map(all.map((item) => [String(item.pid), Number(item.price) || 0]));
+  }
+  return myProductPriceCache.get(String(pid)) || 0;
+}
+
+export function clearMyProductPriceCache() {
+  myProductPriceCache = null;
+}
+
+/** מחיר ישן / שגוי במסד */
+export function isLikelyStaleCjPrice(price, markupPercent = 30) {
   const n = Number(price);
-  return Number.isFinite(n) && n > 0 && n < 15;
+  if (!Number.isFinite(n) || n <= 0) return true;
+  if (n < 15) return true;
+  const fallback = getDefaultFallbackRetailIls(markupPercent);
+  if (fallback != null && n === fallback) return true;
+  return false;
+}
+
+async function resolveCostUsd(detail, cjPid) {
+  let cost = Number(detail.costUsd ?? detail.price);
+  if (Number.isFinite(cost) && cost > 0) return cost;
+  const fromList = await getMyProductUsdPrice(cjPid);
+  return fromList > 0 ? fromList : 0;
 }
 
 /** מעדכן מחירי מכירה בשקלים לכל המוצרים מ-CJ שכבר בחנות */
 export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = false } = {}) {
+  clearMyProductPriceCache();
   const { getAllProducts, updateProduct } = await import('./db.js');
   const products = await getAllProducts();
   let cjProducts = products.filter((p) => p.cjPid);
@@ -370,12 +395,17 @@ export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = f
   for (const p of cjProducts) {
     try {
       const detail = await getCjProductDetail(p.cjPid);
-      const retail = calculateRetailPriceIls(detail.costUsd ?? detail.price, {
+      const costUsd = await resolveCostUsd(detail, p.cjPid);
+      const retail = calculateRetailPriceIls(costUsd, {
         markupPercent,
         shippingUsd: detail.shippingUsd,
       });
+      if (retail == null) {
+        results.push({ id: p.id, error: 'לא נמצא מחיר עלות ב-CJ' });
+        continue;
+      }
       await updateProduct(p.id, { price: retail });
-      results.push({ id: p.id, name: p.name, price: retail, costUsd: detail.costUsd });
+      results.push({ id: p.id, name: p.name, price: retail, costUsd });
       await new Promise((r) => setTimeout(r, 300));
     } catch (err) {
       results.push({ id: p.id, error: err.message });
@@ -393,6 +423,7 @@ export async function importCjProducts(
   { markupPercent = 30, categoryId = 'electronics', translateToHebrew = true } = {}
 ) {
   const doTranslate = translateToHebrew !== false;
+  clearMyProductPriceCache();
   const imported = [];
   const skipped = [];
 
@@ -414,11 +445,15 @@ export async function importCjProducts(
           console.warn(`CJ translate ${pid}:`, err.message);
         }
       }
-      const costUsd = Number(detail.costUsd ?? detail.price);
+      const costUsd = await resolveCostUsd(detail, pid);
       const retail = calculateRetailPriceIls(costUsd, {
         markupPercent: validMarkup,
         shippingUsd: detail.shippingUsd,
       });
+      if (retail == null) {
+        skipped.push({ pid, error: 'לא נמצא מחיר עלות ב-CJ' });
+        continue;
+      }
       imported.push({
         ...detail,
         name,
@@ -440,6 +475,7 @@ export async function syncMyCjProductsToStore({
   categoryId = 'electronics',
   translateToHebrew = true,
 } = {}) {
+  clearMyProductPriceCache();
   const myProducts = await getAllMyCjProducts();
   if (!myProducts.length) {
     return { myProducts: [], imported: [], skipped: [], message: 'אין מוצרים ב-CJ – לחץ Added על מוצרים ב-CJ קודם' };
