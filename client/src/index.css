@@ -367,6 +367,12 @@ img {
   box-shadow: var(--shadow);
 }
 
+.gallery-video-count {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  margin: 0 0 0.35rem;
+}
+
 .product-media-gallery {
   display: flex;
   flex-direction: row-reverse;

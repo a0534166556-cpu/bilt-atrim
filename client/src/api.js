@@ -210,6 +210,13 @@ export async function adminCjRetranslateDescriptions() {
   return request(`${API}/admin/cj/retranslate-descriptions`, { method: 'POST' });
 }
 
+export async function adminCjRefreshVideos() {
+  return request(`${API}/admin/cj/refresh-videos`, {
+    method: 'POST',
+    body: JSON.stringify({ forceAll: true }),
+  });
+}
+
 export async function adminTranslateProduct(id) {
   return request(`${API}/admin/products/${id}/translate`, { method: 'POST' });
 }

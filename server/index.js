@@ -55,6 +55,7 @@ import {
   recalculateAllCjPrices,
   recalculateStaleCjPrices,
   refreshStaleCjVideos,
+  refreshAllCjVideos,
   getCjProductDetail,
 } from './cj.js';
 import {
@@ -640,6 +641,26 @@ app.get(
     const { page = '1', size = '50' } = req.query;
     const result = await getMyCjProducts(Number(page) || 1, Number(size) || 50);
     res.json(result);
+  })
+);
+
+app.post(
+  '/api/admin/cj/refresh-videos',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    if (!isCjConfigured()) {
+      return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
+    }
+    const { forceAll = true } = req.body || {};
+    const results = forceAll
+      ? await refreshAllCjVideos()
+      : await refreshStaleCjVideos({ forceAll: false });
+    res.json({
+      updated: results.filter((r) => r.status === 'ok').length,
+      noVideos: results.filter((r) => r.status === 'no-videos').length,
+      failed: results.filter((r) => r.status === 'error').length,
+      details: results,
+    });
   })
 );
 

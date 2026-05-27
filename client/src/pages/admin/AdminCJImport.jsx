@@ -8,6 +8,7 @@ import {
   adminCjSyncMy,
   adminCjRecalculatePrices,
   adminCjRetranslateDescriptions,
+  adminCjRefreshVideos,
   fetchCategories,
   formatPrice,
 } from '../../api';
@@ -30,6 +31,7 @@ export default function AdminCJImport() {
   const [syncing, setSyncing] = useState(false);
   const [recalcPrices, setRecalcPrices] = useState(false);
   const [retranslateDesc, setRetranslateDesc] = useState(false);
+  const [refreshVideos, setRefreshVideos] = useState(false);
   const [translateToHebrew, setTranslateToHebrew] = useState(true);
 
   useEffect(() => {
@@ -55,6 +57,18 @@ export default function AdminCJImport() {
       setMyProductsStatus(err.message || 'שגיאה בטעינת מוצרים מ-CJ');
     } finally {
       setLoadingMy(false);
+    }
+  };
+
+  const fixVideos = async () => {
+    setRefreshVideos(true);
+    try {
+      const data = await adminCjRefreshVideos();
+      showToast(`עודכנו סרטונים ל-${data.updated} מוצרים (${data.noVideos} בלי סרטון)`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setRefreshVideos(false);
     }
   };
 
@@ -228,6 +242,14 @@ export default function AdminCJImport() {
                 onClick={fixPrices}
               >
                 {recalcPrices ? 'מחשב מחירים...' : 'עדכן מחירים לשקלים'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={refreshVideos}
+                onClick={fixVideos}
+              >
+                {refreshVideos ? 'מרענן סרטונים...' : 'רענן סרטונים (3+ מ-CJ)'}
               </button>
               <button
                 type="button"

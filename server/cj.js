@@ -6,6 +6,11 @@ import {
   extractCostUsd,
   getDefaultFallbackRetailIls,
 } from './pricing.js';
+import {
+  isPlayableCjVideoUrl,
+  normalizeCjVideoUrl,
+  MIN_PRODUCT_VIDEOS,
+} from './media.js';
 
 const CJ_BASE = 'https://developers.cjdropshipping.com/api2.0/v1';
 
@@ -194,25 +199,40 @@ function collectImages(p) {
   return urls.slice(0, 24);
 }
 
-function isDirectPlayableVideoUrl(url) {
-  const u = String(url).trim();
-  if (!/^https?:\/\//i.test(u)) return false;
-  if (u.includes('download-only-api.cjdropshipping.com')) return true;
-  if (/\.(mp4|webm|m3u8)(\?|$)/i.test(u)) return true;
-  if (u.includes('video-cf.cjdropshipping.com') && !/\.(mp4|webm)/i.test(u)) return false;
-  return /\.(mp4|webm)/i.test(u);
+function extractMp4UrlsFromHtml(html) {
+  const urls = [];
+  if (!html || typeof html !== 'string') return urls;
+  const re = /https?:\/\/[^\s"'<>]+\.(?:mp4|webm)(?:\?[^\s"'<>]*)?/gi;
+  let m;
+  while ((m = re.exec(html))) urls.push(m[0]);
+  const dlRe = /https?:\/\/download-only-api\.cjdropshipping\.com\/[^\s"'<>]+/gi;
+  while ((m = dlRe.exec(html))) urls.push(m[0]);
+  return urls;
+}
+
+function mergeVideoEntries(...lists) {
+  const seen = new Set();
+  const out = [];
+  for (const list of lists) {
+    for (const v of list || []) {
+      if (!v?.url || seen.has(v.url)) continue;
+      seen.add(v.url);
+      out.push(v);
+    }
+  }
+  return out;
 }
 
 function videoEntry(url, poster = '') {
-  const u = String(url).trim();
-  if (!isDirectPlayableVideoUrl(u)) return null;
+  const u = normalizeCjVideoUrl(url);
+  if (!u || !isPlayableCjVideoUrl(u)) return null;
   return {
     url: u,
     poster: enhanceImageUrl(poster) || '',
   };
 }
 
-/** כתובות MP4 אמיתיות מ-CJ (דורש Referer בדפדפן – נשתמש בפרוקסי) */
+/** כתובות MP4 אמיתיות מ-CJ */
 export async function fetchCjVideosByProductId(pid) {
   const data = await cjRequest('/product/queryVideosByProductId', {
     method: 'POST',
@@ -220,12 +240,38 @@ export async function fetchCjVideosByProductId(pid) {
   });
   const list = Array.isArray(data.data) ? data.data : [];
   return list
-    .filter((v) => v.videoUrl && (v.videoState === 'ON_STATE' || !v.videoState))
-    .map((v) =>
-      videoEntry(v.videoUrl, v.coverURL || v.coverUrl || '')
-    )
-    .filter(Boolean)
-    .slice(0, 10);
+    .filter((v) => v.videoUrl && v.videoState !== 'DOWN_STATE' && v.videoState !== 'DELETE_STATE')
+    .sort((a, b) => Number(a.videoType ?? 99) - Number(b.videoType ?? 99))
+    .map((v) => videoEntry(v.videoUrl, v.coverURL || v.coverUrl || ''))
+    .filter(Boolean);
+}
+
+async function collectAllProductVideos(p, pid) {
+  const poster = p.productImage || p.bigImage || '';
+  const desc = pickCjDescription(p);
+  const parts = [];
+
+  try {
+    parts.push(await fetchCjVideosByProductId(pid));
+  } catch (err) {
+    console.warn(`CJ videos API ${pid}:`, err.message);
+  }
+
+  if (Array.isArray(p.productVideo)) {
+    const fromField = p.productVideo
+      .map((v) => videoEntry(v, poster))
+      .filter(Boolean);
+    parts.push(fromField);
+  }
+
+  parts.push(collectVideos(p));
+
+  const fromHtml = extractMp4UrlsFromHtml(desc)
+    .map((url) => videoEntry(url, poster))
+    .filter(Boolean);
+  parts.push(fromHtml);
+
+  return mergeVideoEntries(...parts).slice(0, 10);
 }
 
 function collectVideos(p) {
@@ -345,20 +391,7 @@ export async function getCjProductDetail(pid) {
   const p = data.data || {};
   const variants = p.variantList || p.variants || [];
   const images = collectImages(p);
-  let videos = collectVideos(p);
-  try {
-    const fromApi = await fetchCjVideosByProductId(pid);
-    if (fromApi.length) {
-      const seen = new Set();
-      videos = [...fromApi, ...videos].filter((v) => {
-        if (!v?.url || seen.has(v.url)) return false;
-        seen.add(v.url);
-        return true;
-      }).slice(0, 10);
-    }
-  } catch (err) {
-    console.warn(`CJ videos ${pid}:`, err.message);
-  }
+  const videos = await collectAllProductVideos(p, pid);
   const videoUrl = videos[0]?.url || '';
   const costUsd = extractCostUsd(p, variants);
   const shippingUsd = extractShippingUsd(p, variants);
@@ -453,26 +486,34 @@ export async function recalculateStaleCjPrices(markupPercent = 30) {
   return recalculateAllCjPrices(markupPercent, { onlyStale: true });
 }
 
-function hasBrokenVideoUrls(product) {
-  const urls = [
+function getStoredVideoUrls(product) {
+  return [
     product.videoUrl,
     ...(product.videos || []).map((v) => (typeof v === 'string' ? v : v?.url)),
   ].filter(Boolean);
-  if (!urls.length) return true;
+}
+
+function needsVideoRefresh(product) {
+  const urls = getStoredVideoUrls(product);
+  const playable = urls
+    .map((u) => normalizeCjVideoUrl(u))
+    .filter((u) => u && isPlayableCjVideoUrl(u));
+  const unique = [...new Set(playable)];
+  if (unique.length < MIN_PRODUCT_VIDEOS) return true;
+  if (unique.length !== urls.length) return true;
   return urls.some(
     (u) => u.includes('video-cf.cjdropshipping.com') && !/\.(mp4|webm)/i.test(u)
   );
 }
 
-/** מעדכן סרטונים עם כתובות MP4 אמיתיות מ-CJ */
-export async function refreshStaleCjVideos() {
+/** מעדכן סרטונים – מתקן שבורים ומושך עד 3+ מ-CJ */
+export async function refreshStaleCjVideos({ forceAll = false } = {}) {
   const { getAllProducts, updateProduct } = await import('./db.js');
-  const { isPlayableCjVideoUrl } = await import('./media.js');
   const products = (await getAllProducts()).filter((p) => p.cjPid);
   const results = [];
 
   for (const p of products) {
-    if (!hasBrokenVideoUrls(p)) continue;
+    if (!forceAll && !needsVideoRefresh(p)) continue;
     try {
       const detail = await getCjProductDetail(p.cjPid);
       const videos = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
@@ -481,7 +522,7 @@ export async function refreshStaleCjVideos() {
         continue;
       }
       await updateProduct(p.id, {
-        videoUrl: detail.videoUrl,
+        videoUrl: videos[0]?.url || detail.videoUrl,
         videos,
       });
       results.push({ id: p.id, status: 'ok', count: videos.length });
@@ -491,6 +532,10 @@ export async function refreshStaleCjVideos() {
     }
   }
   return results;
+}
+
+export async function refreshAllCjVideos() {
+  return refreshStaleCjVideos({ forceAll: true });
 }
 
 export async function importCjProducts(
