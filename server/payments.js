@@ -1,6 +1,6 @@
 import Stripe from 'stripe';
 import { confirmOrderPayment, setOrderStripeSession } from './db.js';
-import { notifyOrderConfirmation } from './email.js';
+import { notifyOrderConfirmation, notifyAdminNewOrder } from './email.js';
 
 const stripeSecret = process.env.STRIPE_SECRET_KEY;
 const webhookSecret = process.env.STRIPE_WEBHOOK_SECRET;
@@ -70,8 +70,12 @@ export async function verifyStripeSession(sessionId) {
   }
   const orderId = Number(session.metadata?.orderId || session.client_reference_id);
   if (!orderId) return { ok: false, error: 'הזמנה לא נמצאה' };
-  await confirmOrderPayment(orderId, session.id);
-  return { ok: true, orderId };
+  const result = await confirmOrderPayment(orderId, session.id);
+  if (result.newlyConfirmed) {
+    notifyOrderConfirmation(orderId).catch(() => {});
+    notifyAdminNewOrder(orderId).catch(() => {});
+  }
+  return { ok: true, orderId, newlyConfirmed: result.newlyConfirmed };
 }
 
 export async function handleStripeWebhook(rawBody, signature) {
@@ -88,6 +92,7 @@ export async function handleStripeWebhook(rawBody, signature) {
         const result = await confirmOrderPayment(orderId, session.id);
         if (result.newlyConfirmed) {
           notifyOrderConfirmation(orderId).catch(() => {});
+          notifyAdminNewOrder(orderId).catch(() => {});
         }
       }
     }

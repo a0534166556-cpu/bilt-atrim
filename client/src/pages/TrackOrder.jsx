@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { Helmet } from 'react-helmet-async';
+import PageHelmet from '../components/PageHelmet';
 import {
   trackOrder,
   formatPrice,
@@ -7,6 +7,7 @@ import {
   PAYMENT_METHOD_LABELS,
   PAYMENT_STATUS_LABELS,
 } from '../api';
+import { trackingUrl } from '../utils/tracking';
 
 export default function TrackOrder() {
   const [orderId, setOrderId] = useState('');
@@ -30,9 +31,11 @@ export default function TrackOrder() {
     }
   };
 
+  const trackLink = order?.trackingNumber ? trackingUrl(order.trackingNumber) : null;
+
   return (
     <div className="container page track-page">
-      <Helmet><title>מעקב הזמנה | מרקט גוגל</title></Helmet>
+      <PageHelmet title="מעקב הזמנה" />
       <h1>מעקב הזמנה</h1>
       <p>הזן את מספר ההזמנה והאימייל שבו השתמשת בקנייה.</p>
       <p className="track-hint">
@@ -72,6 +75,14 @@ export default function TrackOrder() {
           {order.trackingNumber && (
             <p className="tracking-number">
               <strong>מספר מעקב:</strong> {order.trackingNumber}
+              {trackLink && (
+                <>
+                  {' '}
+                  <a href={trackLink} target="_blank" rel="noreferrer" className="btn btn-sm btn-outline">
+                    מעקב ב-17track
+                  </a>
+                </>
+              )}
             </p>
           )}
           {order.discount > 0 && (

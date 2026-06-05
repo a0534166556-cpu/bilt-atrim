@@ -1,53 +1,29 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
+import { refreshProductVideos } from '../api';
 
 function videoMimeType(url) {
   if (/\.webm(\?|$)/i.test(url)) return 'video/webm';
   return 'video/mp4';
 }
 
-function GalleryVideo({ item, poster, productName }) {
+function GalleryVideo({ item, poster, onDead }) {
   const [src, setSrc] = useState(item.url);
-  const [failed, setFailed] = useState(false);
-  const [fallbackStep, setFallbackStep] = useState(0);
+  const [triedOriginal, setTriedOriginal] = useState(false);
 
   useEffect(() => {
     setSrc(item.url);
-    setFailed(false);
-    setFallbackStep(0);
+    setTriedOriginal(false);
   }, [item.url]);
 
   const handleError = () => {
     const original = item.originalUrl;
-    if (fallbackStep === 0 && original && src !== original) {
-      setFallbackStep(1);
+    if (!triedOriginal && original && src !== original) {
+      setTriedOriginal(true);
       setSrc(original);
       return;
     }
-    if (fallbackStep <= 1 && original && !src.includes('/api/media/cj-video')) {
-      setFallbackStep(2);
-      setSrc(`/api/media/cj-video?url=${encodeURIComponent(original)}`);
-      return;
-    }
-    setFailed(true);
+    onDead?.(item.url);
   };
-
-  if (failed) {
-    return (
-      <div className="product-video-fallback">
-        <p>לא ניתן לטעון את הסרטון בדפדפן.</p>
-        {item.originalUrl && (
-          <a
-            href={item.originalUrl}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="btn btn-outline btn-sm"
-          >
-            פתח סרטון בחלון חדש
-          </a>
-        )}
-      </div>
-    );
-  }
 
   return (
     <video
@@ -65,15 +41,53 @@ function GalleryVideo({ item, poster, productName }) {
   );
 }
 
-export default function ProductMediaGallery({ images = [], videos = [], productName = '' }) {
+export default function ProductMediaGallery({ images = [], videos = [], productName = '', productId }) {
+  const [videoList, setVideoList] = useState(videos);
+  const [deadVideos, setDeadVideos] = useState(() => new Set());
+  const [refreshing, setRefreshing] = useState(false);
+  const refreshedRef = useRef(false);
+
+  useEffect(() => {
+    setVideoList(videos);
+    setDeadVideos(new Set());
+    refreshedRef.current = false;
+  }, [videos, productId]);
+
+  const tryRefresh = async () => {
+    if (refreshedRef.current || !productId) return;
+    refreshedRef.current = true;
+    setRefreshing(true);
+    try {
+      const data = await refreshProductVideos(productId);
+      if (Array.isArray(data.videos) && data.videos.length) {
+        setVideoList(data.videos);
+        setDeadVideos(new Set());
+      }
+    } catch {
+      /* נשאר עם התמונות */
+    } finally {
+      setRefreshing(false);
+    }
+  };
+
+  const markDead = (url) => {
+    setDeadVideos((prev) => {
+      if (prev.has(url)) return prev;
+      const next = new Set(prev);
+      next.add(url);
+      return next;
+    });
+    tryRefresh();
+  };
+
   const media = useMemo(() => {
     const items = [];
     const seen = new Set();
 
-    (videos || []).forEach((v) => {
+    (videoList || []).forEach((v) => {
       const url = typeof v === 'string' ? v : v?.url;
       const originalUrl = typeof v === 'object' ? v.originalUrl || url : url;
-      if (!url || seen.has(url)) return;
+      if (!url || seen.has(url) || deadVideos.has(url)) return;
       seen.add(url);
       items.push({
         type: 'video',
@@ -90,14 +104,18 @@ export default function ProductMediaGallery({ images = [], videos = [], productN
     });
 
     return items;
-  }, [images, videos]);
+  }, [images, videoList, deadVideos]);
 
   const [active, setActive] = useState(0);
   const videoCount = media.filter((m) => m.type === 'video').length;
 
   useEffect(() => {
     setActive(0);
-  }, [media.length, videos.length]);
+  }, [videoList.length]);
+
+  useEffect(() => {
+    if (active > media.length - 1) setActive(0);
+  }, [media.length, active]);
 
   if (!media.length) {
     return <div className="product-no-img large">📦</div>;
@@ -113,6 +131,7 @@ export default function ProductMediaGallery({ images = [], videos = [], productN
           {videoCount} {videoCount === 1 ? 'סרטון' : 'סרטונים'}
         </p>
       )}
+      {refreshing && <p className="gallery-video-count">מרענן סרטון...</p>}
       {media.length > 1 && (
         <div className="product-media-thumbs">
           {media.map((item, i) => (
@@ -132,7 +151,7 @@ export default function ProductMediaGallery({ images = [], videos = [], productN
 
       <div className="product-media-main">
         {current.type === 'video' ? (
-          <GalleryVideo item={current} poster={poster} productName={productName} />
+          <GalleryVideo item={current} poster={poster} onDead={markDead} />
         ) : (
           <img
             src={current.url}

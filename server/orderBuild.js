@@ -1,11 +1,10 @@
 import { getProductById, validateCoupon, getStore, getEffectivePrice } from './db.js';
 
-export const SHIPPING_COST = 29;
+export const SHIPPING_COST = 0;
 
-export function calcShipping(subtotal, store) {
-  const min = store?.freeShippingMin || 0;
-  if (min > 0 && subtotal >= min) return 0;
-  return subtotal > 0 ? SHIPPING_COST : 0;
+/** משלוח חינם – המחיר של כל מוצר כבר כולל את עלות המשלוח */
+export function calcShipping() {
+  return 0;
 }
 
 export async function buildOrderFromBody(body) {

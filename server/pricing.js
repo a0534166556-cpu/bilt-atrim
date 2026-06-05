@@ -1,7 +1,14 @@
 /**
  * מחיר CJ בדולרים → מחיר מכירה בשקלים
- * (עלות מוצר + משלוח) × שער × (1 + אחוז רווח)
+ * (עלות מוצר + משלוח CJ) × שער × (1 + אחוז רווח)
+ * המחיר כולל משלוח – הלקוח מקבל משלוח חינם בקופה.
  */
+
+/** אחוז הרווח על העלות הכוללת (מוצר + משלוח) */
+export const DEFAULT_MARKUP_PERCENT = (() => {
+  const m = Number(process.env.CJ_MARKUP_PERCENT);
+  return Number.isFinite(m) && m >= 0 ? m : 25;
+})();
 
 export function getUsdToIlsRate() {
   const rate = Number(process.env.USD_TO_ILS);
@@ -13,10 +20,11 @@ export function getDefaultShippingUsd() {
   return Number.isFinite(ship) && ship >= 0 ? ship : 4;
 }
 
-/** משלוח CJ בתוך מחיר המוצר? ברירת מחדל לא – הלקוח משלם משלוח בנפרד בקופה (₪29) */
+/** משלוח CJ נכלל תמיד במחיר המוצר (אלא אם הוגדר במפורש false) */
 export function includesCjShippingInProductPrice() {
   const v = process.env.CJ_PRICE_INCLUDES_SHIPPING?.trim().toLowerCase();
-  return v === '1' || v === 'true' || v === 'yes';
+  if (v === '0' || v === 'false' || v === 'no') return false;
+  return true;
 }
 
 function resolveShippingUsd(shippingUsd) {
@@ -28,18 +36,18 @@ function resolveShippingUsd(shippingUsd) {
 }
 
 /** מחיר ברירת מחדל כשעלות CJ חסרה (1$ + משלוח) – לזיהוי מחירים שגויים */
-export function getDefaultFallbackRetailIls(markupPercent = 30) {
+export function getDefaultFallbackRetailIls(markupPercent = DEFAULT_MARKUP_PERCENT) {
   return calculateRetailPriceIls(1, { markupPercent });
 }
 
 /** עלות USD מ-CJ + משלוח USD → מחיר מכירה בש"ח (null אם אין עלות) */
-export function calculateRetailPriceIls(costUsd, { markupPercent = 30, shippingUsd } = {}) {
+export function calculateRetailPriceIls(costUsd, { markupPercent = DEFAULT_MARKUP_PERCENT, shippingUsd } = {}) {
   const cost = Number(costUsd);
   if (!Number.isFinite(cost) || cost <= 0) return null;
 
   const ship = resolveShippingUsd(shippingUsd);
   const markup = Number(markupPercent);
-  const validMarkup = Number.isFinite(markup) ? markup : 30;
+  const validMarkup = Number.isFinite(markup) ? markup : DEFAULT_MARKUP_PERCENT;
 
   const subtotalUsd = cost + ship;
   const withProfitUsd = subtotalUsd * (1 + validMarkup / 100);
@@ -49,12 +57,12 @@ export function calculateRetailPriceIls(costUsd, { markupPercent = 30, shippingU
 }
 
 /** פירוט לתצוגה בניהול */
-export function explainRetailPrice(costUsd, { markupPercent = 30, shippingUsd } = {}) {
+export function explainRetailPrice(costUsd, { markupPercent = DEFAULT_MARKUP_PERCENT, shippingUsd } = {}) {
   const cost = Number(costUsd);
   if (!Number.isFinite(cost) || cost <= 0) return null;
   const ship = resolveShippingUsd(shippingUsd);
   const markup = Number(markupPercent);
-  const validMarkup = Number.isFinite(markup) ? markup : 30;
+  const validMarkup = Number.isFinite(markup) ? markup : DEFAULT_MARKUP_PERCENT;
   const rate = getUsdToIlsRate();
   const subtotalUsd = cost + ship;
   const retail = calculateRetailPriceIls(cost, { markupPercent: validMarkup, shippingUsd: ship });
@@ -66,8 +74,8 @@ export function explainRetailPrice(costUsd, { markupPercent = 30, shippingUsd } 
     subtotalUsd,
     retailIls: retail,
     checkoutShippingNote: includesCjShippingInProductPrice()
-      ? null
-      : 'משלוח ללקוח נגבה בנפרד בקופה (₪29)',
+      ? 'המחיר כולל משלוח – משלוח חינם ללקוח'
+      : 'משלוח ללקוח נגבה בנפרד בקופה',
   };
 }
 

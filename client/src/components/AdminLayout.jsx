@@ -29,6 +29,7 @@ export default function AdminLayout({ children, title }) {
     } catch {
       /* ignore */
     }
+    localStorage.removeItem('authToken');
     localStorage.removeItem('adminToken');
     navigate('/admin/login');
   };

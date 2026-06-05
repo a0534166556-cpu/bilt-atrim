@@ -41,6 +41,34 @@ export function proxyVideoUrl(url) {
   return `/api/media/cj-video?url=${encodeURIComponent(raw)}`;
 }
 
+/** בודק שכתובת הסרטון באמת מגישה וידאו (200/206) ולא דף 404 */
+export async function checkVideoIsLive(url) {
+  const target = normalizeCjVideoUrl(url) || url;
+  if (!/^https?:\/\//i.test(target)) return false;
+  try {
+    const res = await fetch(target, {
+      headers: {
+        Referer: CJ_REFERER,
+        'User-Agent': 'Mozilla/5.0',
+        Range: 'bytes=0-1',
+      },
+      redirect: 'follow',
+      signal: AbortSignal.timeout ? AbortSignal.timeout(15000) : undefined,
+    });
+    const contentType = res.headers.get('content-type') || '';
+    try {
+      await res.arrayBuffer();
+    } catch {
+      /* drain */
+    }
+    if (res.status !== 200 && res.status !== 206) return false;
+    if (/text\/html/i.test(contentType)) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 export function mapProductMediaForClient(product) {
   if (!product) return product;
 

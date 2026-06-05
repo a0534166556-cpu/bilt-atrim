@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate, Link, useSearchParams } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
 import { useCart } from '../context/CartContext';
 import { useStore } from '../context/StoreContext';
+import PageHelmet from '../components/PageHelmet';
 import {
   createOrder,
   createStripeCheckout,
@@ -11,11 +11,11 @@ import {
   formatPrice,
 } from '../api';
 import { useToast } from '../context/ToastContext';
-import FreeShippingBar from '../components/FreeShippingBar';
-
+import { useAuth } from '../context/AuthContext';
 export default function Checkout() {
   const { items, total, clearCart } = useCart();
   const { store } = useStore();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const { showToast } = useToast();
@@ -25,6 +25,7 @@ export default function Checkout() {
   const [appliedCoupon, setAppliedCoupon] = useState('');
   const [paymentMethod, setPaymentMethod] = useState('cod');
   const [stripeEnabled, setStripeEnabled] = useState(false);
+  const [acceptedTerms, setAcceptedTerms] = useState(false);
   const [form, setForm] = useState({
     name: '', email: '', phone: '', address: '', city: '', notes: '',
   });
@@ -44,10 +45,21 @@ export default function Checkout() {
     }
   }, [searchParams, showToast]);
 
+  useEffect(() => {
+    if (!user || user.role === 'admin') return;
+    setForm((f) => ({
+      ...f,
+      name: f.name || user.name || '',
+      email: f.email || user.email || '',
+      phone: f.phone || user.phone || '',
+      address: f.address || user.address || '',
+      city: f.city || user.city || '',
+    }));
+  }, [user]);
+
   const subtotal = total;
   const afterDiscount = subtotal - discount;
-  const freeShipping = store?.freeShippingMin && afterDiscount >= store.freeShippingMin;
-  const shippingCost = freeShipping ? 0 : afterDiscount > 0 ? 29 : 0;
+  const shippingCost = 0;
   const grandTotal = afterDiscount + shippingCost;
 
   if (items.length === 0) {
@@ -78,6 +90,7 @@ export default function Checkout() {
 
   const orderPayload = () => ({
     ...form,
+    acceptedTerms: true,
     couponCode: appliedCoupon || undefined,
     items: items.map((i) => ({
       id: i.id,
@@ -89,12 +102,15 @@ export default function Checkout() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    if (!acceptedTerms) {
+      showToast('יש לאשר את תנאי השימוש ומדיניות הפרטיות', 'error');
+      return;
+    }
     if (loading) return;
     setLoading(true);
     try {
       if (paymentMethod === 'stripe' && stripeEnabled) {
         const data = await createStripeCheckout(orderPayload());
-        clearCart();
         window.location.href = data.checkoutUrl;
         return;
       }
@@ -115,7 +131,7 @@ export default function Checkout() {
 
   return (
     <>
-      <Helmet><title>תשלום | מרקט גוגל</title></Helmet>
+      <PageHelmet title="תשלום" />
       <div className="container page checkout-page">
         <h1>השלמת הזמנה</h1>
         <div className="checkout-layout">
@@ -188,6 +204,21 @@ export default function Checkout() {
               </label>
             </div>
 
+            <label className="terms-checkbox">
+              <input
+                type="checkbox"
+                checked={acceptedTerms}
+                onChange={(e) => setAcceptedTerms(e.target.checked)}
+                required
+              />
+              <span>
+                קראתי ואני מסכים/ה ל
+                <Link to="/terms" target="_blank">תנאי השימוש</Link>
+                {' '}ו
+                <Link to="/privacy" target="_blank">מדיניות הפרטיות</Link>
+              </span>
+            </label>
+
             <button type="submit" className="btn btn-primary btn-block btn-lg" disabled={loading}>
               {loading ? 'מעבד...' : submitLabel}
             </button>
@@ -197,7 +228,6 @@ export default function Checkout() {
           </form>
           <aside className="checkout-summary">
             <h2>סיכום</h2>
-            <FreeShippingBar subtotal={afterDiscount} />
             <ul>
               {items.map((i) => (
                 <li key={i.id}>
@@ -217,13 +247,8 @@ export default function Checkout() {
             )}
             <div className="summary-row">
               <span>משלוח</span>
-              <span>{shippingCost === 0 ? 'חינם!' : formatPrice(shippingCost)}</span>
+              <span>חינם!</span>
             </div>
-            {!freeShipping && store?.freeShippingMin && (
-              <p className="shipping-hint">
-                משלוח חינם בהזמנה מעל {formatPrice(store.freeShippingMin)}
-              </p>
-            )}
             <div className="summary-row total">
               <span>סה״כ</span>
               <span>{formatPrice(grandTotal)}</span>

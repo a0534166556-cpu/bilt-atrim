@@ -20,7 +20,7 @@ export default function Wishlist() {
 
   return (
     <div className="container page">
-      <Helmet><title>מועדפים | מרקט גוגל</title></Helmet>
+      <Helmet><title>מועדפים | NovaShop</title></Helmet>
       <h1>המועדפים שלי</h1>
       {products.length === 0 ? (
         <p className="empty">אין מוצרים במועדפים עדיין</p>

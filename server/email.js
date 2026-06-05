@@ -226,3 +226,57 @@ export async function notifyOrderShipped(orderId) {
     console.error('notifyOrderShipped:', err.message);
   }
 }
+
+export async function sendContactFormEmail({ name, email, message, store }) {
+  const to = process.env.ADMIN_EMAIL?.trim() || store?.email?.trim();
+  if (!to) return { ok: false, skipped: true };
+  const html = `<!DOCTYPE html><html lang="he" dir="rtl"><body style="font-family:Arial,sans-serif;padding:24px">
+    <h2>פנייה חדשה מהאתר</h2>
+    <p><strong>שם:</strong> ${name}</p>
+    <p><strong>אימייל:</strong> ${email}</p>
+    <p><strong>הודעה:</strong></p>
+    <p>${String(message).slice(0, 2000).replace(/\n/g, '<br>')}</p>
+  </body></html>`;
+  return sendEmail({
+    to,
+    subject: `פנייה מהאתר – ${name}`,
+    html,
+    store,
+  });
+}
+
+export async function notifyAdminNewOrder(orderId) {
+  if (!isEmailConfigured()) return;
+  try {
+    const order = await getOrderById(orderId);
+    const store = await getStore();
+    const adminEmail = process.env.ADMIN_EMAIL?.trim() || store?.email?.trim();
+    if (!order || !adminEmail) return;
+
+    const itemsList = (order.items || [])
+      .map((i) => `${i.name} × ${i.quantity}`)
+      .join('<br>');
+
+    const html = `<!DOCTYPE html>
+<html lang="he" dir="rtl">
+<body style="font-family:Arial,sans-serif;padding:24px">
+  <h2>🛒 הזמנה חדשה #${order.id}</h2>
+  <p><strong>לקוח:</strong> ${order.name} | ${order.phone} | ${order.email}</p>
+  <p><strong>כתובת:</strong> ${order.address}${order.city ? `, ${order.city}` : ''}</p>
+  <p><strong>סכום:</strong> ${formatIls(order.total)}</p>
+  <p><strong>תשלום:</strong> ${order.paymentMethod === 'stripe' ? 'כרטיס' : 'מזומן/העברה'}</p>
+  <p><strong>פריטים:</strong><br>${itemsList}</p>
+  <p style="margin-top:20px;color:#666">הזמן ב-CJ Dropshipping עם כתובת הלקוח ועדכן מעקב בניהול.</p>
+</body>
+</html>`;
+
+    await sendEmail({
+      to: adminEmail,
+      subject: `הזמנה חדשה #${order.id} – ${store?.name || 'החנות'}`,
+      html,
+      store,
+    });
+  } catch (err) {
+    console.error('notifyAdminNewOrder:', err.message);
+  }
+}

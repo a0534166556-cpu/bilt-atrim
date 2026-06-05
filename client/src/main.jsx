@@ -7,6 +7,7 @@ import { CartProvider } from './context/CartContext';
 import { WishlistProvider } from './context/WishlistContext';
 import { ToastProvider } from './context/ToastContext';
 import { StoreProvider } from './context/StoreContext';
+import { AuthProvider } from './context/AuthContext';
 import './index.css';
 
 createRoot(document.getElementById('root')).render(
@@ -14,13 +15,15 @@ createRoot(document.getElementById('root')).render(
     <HelmetProvider>
       <BrowserRouter>
         <StoreProvider>
-          <ToastProvider>
-            <CartProvider>
-              <WishlistProvider>
-                <App />
-              </WishlistProvider>
-            </CartProvider>
-          </ToastProvider>
+          <AuthProvider>
+            <ToastProvider>
+              <CartProvider>
+                <WishlistProvider>
+                  <App />
+                </WishlistProvider>
+              </CartProvider>
+            </ToastProvider>
+          </AuthProvider>
         </StoreProvider>
       </BrowserRouter>
     </HelmetProvider>

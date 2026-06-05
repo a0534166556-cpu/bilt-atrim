@@ -21,7 +21,7 @@ export default function Home() {
     }).catch(console.error);
   }, []);
 
-  const name = store?.name || 'מרקט גוגל';
+  const name = store?.name || 'NovaShop';
 
   return (
     <>

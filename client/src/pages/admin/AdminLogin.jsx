@@ -3,13 +3,15 @@ import { useNavigate } from 'react-router-dom';
 import { adminLogin } from '../../api';
 
 export default function AdminLogin() {
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (localStorage.getItem('adminToken')) navigate('/admin');
+    const token = localStorage.getItem('authToken') || localStorage.getItem('adminToken');
+    if (token) navigate('/admin');
   }, [navigate]);
 
   const handleSubmit = async (e) => {
@@ -17,8 +19,9 @@ export default function AdminLogin() {
     setLoading(true);
     setError('');
     try {
-      const { token } = await adminLogin(password);
-      localStorage.setItem('adminToken', token);
+      const { token } = await adminLogin(email.trim(), password);
+      localStorage.setItem('authToken', token);
+      localStorage.removeItem('adminToken');
       navigate('/admin');
     } catch (err) {
       setError(err.message);
@@ -31,7 +34,17 @@ export default function AdminLogin() {
     <div className="admin-login-page">
       <form className="admin-login-card" onSubmit={handleSubmit}>
         <h1>כניסת מנהל</h1>
-        <p>הזן סיסמת ניהול כדי לנהל מוצרים והזמנות</p>
+        <p>התחבר עם האימייל והסיסמה שלך</p>
+        <label>
+          אימייל
+          <input
+            type="email"
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+            required
+            autoComplete="username"
+          />
+        </label>
         <label>
           סיסמה
           <input
@@ -40,13 +53,13 @@ export default function AdminLogin() {
             onChange={(e) => setPassword(e.target.value)}
             required
             autoFocus
+            autoComplete="current-password"
           />
         </label>
         {error && <p className="error">{error}</p>}
         <button type="submit" className="btn btn-primary btn-block" disabled={loading}>
           {loading ? 'מתחבר...' : 'התחבר'}
         </button>
-        <p className="hint">סיסמת ברירת מחדל: admin123</p>
         <a href="/">← חזרה לחנות</a>
       </form>
     </div>

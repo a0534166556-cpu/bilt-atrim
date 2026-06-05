@@ -1,26 +1,32 @@
 import { useEffect, useState } from 'react';
 import { Link, useParams, useSearchParams } from 'react-router-dom';
-import { Helmet } from 'react-helmet-async';
+import { useCart } from '../context/CartContext';
+import PageHelmet from '../components/PageHelmet';
 import { verifyPayment } from '../api';
 
 export default function OrderSuccess() {
   const { orderId } = useParams();
+  const { clearCart } = useCart();
   const [searchParams] = useSearchParams();
   const sessionId = searchParams.get('session_id');
-  const [paidOnline, setPaidOnline] = useState(!sessionId);
+  const isCod = !sessionId;
+  const [paidOnline, setPaidOnline] = useState(isCod);
   const [verifying, setVerifying] = useState(!!sessionId);
 
   useEffect(() => {
     if (!sessionId) return;
     verifyPayment(sessionId)
-      .then(() => setPaidOnline(true))
+      .then(() => {
+        setPaidOnline(true);
+        clearCart();
+      })
       .catch(() => setPaidOnline(false))
       .finally(() => setVerifying(false));
-  }, [sessionId]);
+  }, [sessionId, clearCart]);
 
   return (
     <div className="container page order-success">
-      <Helmet><title>ההזמנה התקבלה | מרקט גוגל</title></Helmet>
+      <PageHelmet title="ההזמנה התקבלה" />
       <div className="success-icon">✓</div>
       <h1>{verifying ? 'מאשרים תשלום...' : 'תודה על ההזמנה!'}</h1>
       <p>מספר הזמנה: <strong>{orderId}</strong></p>
@@ -33,12 +39,18 @@ export default function OrderSuccess() {
           התשלום עדיין בעיבוד. אם חויבתם – ההזמנה תאושר תוך דקות. לשאלות: צרו קשר.
         </p>
       )}
-      {!sessionId && (
+      {isCod && (
         <p>שמרו את המספר – תוכלו לעקוב אחרי ההזמנה בדף מעקב הזמנה.</p>
       )}
-      <p className="order-email-hint">
-        אישור ההזמנה ומספר ההזמנה נשלחו גם לכתובת האימייל שהזנתם בתשלום.
-      </p>
+      {!verifying && (
+        <p className="order-email-hint">
+          {isCod
+            ? 'אם הגדרתם מייל בשרת – אישור ההזמנה יישלח לכתובת האימייל שהזנתם.'
+            : paidOnline
+              ? 'אישור ההזמנה נשלח לכתובת האימייל שהזנתם.'
+              : 'לאחר אישור התשלום יישלח אליכם מייל עם פרטי ההזמנה.'}
+        </p>
+      )}
       <div className="success-actions">
         <Link to="/track-order" className="btn btn-outline">מעקב הזמנה</Link>
         <Link to="/" className="btn btn-primary">חזרה לחנות</Link>

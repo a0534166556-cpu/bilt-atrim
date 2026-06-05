@@ -27,7 +27,7 @@ export default function Category() {
   return (
     <>
       <Helmet>
-        <title>{`${category?.name || 'קטגוריה'} | מרקט גוגל`}</title>
+        <title>{`${category?.name || 'קטגוריה'} | NovaShop`}</title>
       </Helmet>
       <div className="container page">
         <h1>{category?.name || 'קטגוריה'}</h1>

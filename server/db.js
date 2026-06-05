@@ -1,5 +1,6 @@
 import mysql from 'mysql2/promise';
-import { calculateRetailPriceIls } from './pricing.js';
+import { calculateRetailPriceIls, DEFAULT_MARKUP_PERCENT } from './pricing.js';
+import { hashPassword } from './auth.js';
 import fs from 'fs';
 import path from 'path';
 import { fileURLToPath } from 'url';
@@ -133,6 +134,21 @@ export async function initDb() {
       token VARCHAR(64) PRIMARY KEY,
       expires_at BIGINT NOT NULL
     )`,
+    `CREATE TABLE IF NOT EXISTS users (
+      id INT AUTO_INCREMENT PRIMARY KEY,
+      email VARCHAR(120) NOT NULL UNIQUE,
+      password_hash VARCHAR(255) NOT NULL,
+      name VARCHAR(100) NOT NULL DEFAULT '',
+      phone VARCHAR(30) DEFAULT '',
+      role ENUM('admin','customer') NOT NULL DEFAULT 'customer',
+      created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    )`,
+    `CREATE TABLE IF NOT EXISTS user_sessions (
+      token VARCHAR(64) PRIMARY KEY,
+      user_id INT NOT NULL,
+      expires_at BIGINT NOT NULL,
+      INDEX idx_user (user_id)
+    )`,
   ];
 
   for (const sql of schema) {
@@ -142,10 +158,14 @@ export async function initDb() {
   await migrateOrderPaymentColumns();
   await migrateStorePromoColumns();
   await migrateProductCjColumns();
+  await migrateUserColumns();
 
   const [[{ c }]] = await pool.query('SELECT COUNT(*) AS c FROM products');
   if (c === 0) await seedFromJson();
   else await ensureStore();
+
+  await ensureOwnerUser();
+  await syncStoreOwnerContact();
 
   const removed = await deleteDemoProducts();
   if (removed > 0) console.log(`Removed ${removed} demo products`);
@@ -184,6 +204,51 @@ async function migrateStorePromoColumns() {
   }
 }
 
+async function migrateUserColumns() {
+  try {
+    await pool.query('ALTER TABLE orders ADD COLUMN user_id INT NULL');
+  } catch (e) {
+    if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+  }
+  const cols = [
+    ['address', "VARCHAR(255) DEFAULT ''"],
+    ['city', "VARCHAR(100) DEFAULT ''"],
+  ];
+  for (const [name, def] of cols) {
+    try {
+      await pool.query(`ALTER TABLE users ADD COLUMN ${name} ${def}`);
+    } catch (e) {
+      if (e.code !== 'ER_DUP_FIELDNAME') throw e;
+    }
+  }
+}
+
+const OWNER_EMAIL = () =>
+  (process.env.OWNER_EMAIL || process.env.ADMIN_EMAIL || 'a0534166556@gmail.com').toLowerCase();
+const OWNER_PHONE = () => process.env.OWNER_PHONE || '0508254935';
+const OWNER_WHATSAPP = () => process.env.OWNER_WHATSAPP || '972508254935';
+
+async function ensureOwnerUser() {
+  const [[admin]] = await pool.query("SELECT id FROM users WHERE role = 'admin' LIMIT 1");
+  if (admin) return;
+
+  const password = process.env.ADMIN_PASSWORD || 'admin123';
+  const passwordHash = await hashPassword(password);
+  await pool.query(
+    `INSERT INTO users (email, password_hash, name, phone, role) VALUES (?, ?, ?, ?, 'admin')`,
+    [OWNER_EMAIL(), passwordHash, 'מנהל', OWNER_PHONE()]
+  );
+  console.log(`נוצר משתמש מנהל: ${OWNER_EMAIL()} (שנה סיסמה ב-Railway: ADMIN_PASSWORD)`);
+}
+
+async function syncStoreOwnerContact() {
+  await pool.query(
+    `UPDATE store SET email = ?, phone = ?, whatsapp = ?
+     WHERE id = 1 AND (email IS NULL OR email = '' OR email = 'support@example.com')`,
+    [OWNER_EMAIL(), OWNER_PHONE(), OWNER_WHATSAPP()]
+  );
+}
+
 async function migrateOrderPaymentColumns() {
   const cols = [
     ["payment_method", "VARCHAR(20) DEFAULT 'cod'"],
@@ -209,14 +274,14 @@ async function insertDefaultStore() {
     `INSERT INTO store (id, name, tagline, email, phone, whatsapp, address, shipping_info, free_shipping_min)
      VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
-      'מרקט גוגל',
+      'NovaShop',
       'החנות שלך למכירה בגוגל ובאינטרנט',
-      'support@example.com',
-      '03-1234567',
-      '972501234567',
+      'a0534166556@gmail.com',
+      '0508254935',
+      '972508254935',
       'ישראל',
-      'משלוח חינם בהזמנה מעל 300 ₪ | 3-5 ימי עסקים',
-      300,
+      'משלוח חינם לכל הארץ | 7-14 ימי עסקים',
+      0,
     ]
   );
 }
@@ -339,7 +404,7 @@ function safePrice(value, min = 1) {
 }
 
 /** מחיר מכירה בש"ח – לא מחיר CJ בדולרים */
-function resolveStorePriceIls(item, markupPercent = 30) {
+function resolveStorePriceIls(item, markupPercent = DEFAULT_MARKUP_PERCENT) {
   const retail = Number(item.retail);
   if (Number.isFinite(retail) && retail >= 5) return Math.ceil(retail);
 
@@ -499,7 +564,7 @@ export async function getProductByCjPid(cjPid) {
   return row ? Number(row.id) : null;
 }
 
-export async function importCjProductsToStore(cjItems, categoryId, markupPercent = 30) {
+export async function importCjProductsToStore(cjItems, categoryId, markupPercent = DEFAULT_MARKUP_PERCENT) {
   const results = [];
   const cat = categoryId && String(categoryId) !== 'NaN' ? String(categoryId) : 'electronics';
   const markup = Number(markupPercent);
@@ -760,6 +825,7 @@ export async function createOrder(orderData, orderItems, options = {}) {
   const reserveStock = options.reserveStock ?? paymentMethod !== 'stripe';
   const status = paymentMethod === 'stripe' ? 'awaiting_payment' : 'pending';
   const paymentStatus = 'pending';
+  const userId = options.userId || null;
 
   const conn = await pool.getConnection();
   try {
@@ -779,10 +845,11 @@ export async function createOrder(orderData, orderItems, options = {}) {
     }
 
     await conn.query(
-      `INSERT INTO orders (id, name, email, phone, address, city, notes, subtotal, discount, coupon_code, shipping_cost, total, tracking_number, status, payment_method, payment_status)
-       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
+      `INSERT INTO orders (id, user_id, name, email, phone, address, city, notes, subtotal, discount, coupon_code, shipping_cost, total, tracking_number, status, payment_method, payment_status)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, '', ?, ?, ?)`,
       [
         orderId,
+        userId,
         orderData.name,
         orderData.email,
         orderData.phone,
@@ -813,6 +880,9 @@ export async function createOrder(orderData, orderItems, options = {}) {
     ]);
 
     await conn.commit();
+    if (userId) {
+      saveUserContactFromOrder(userId, orderData).catch(() => {});
+    }
     return orderId;
   } catch (e) {
     await conn.rollback();
@@ -879,7 +949,7 @@ export async function confirmOrderPayment(orderId, stripeSessionId) {
   }
 }
 
-export async function updateOrder(id, { status, trackingNumber }, stockRestoreStatuses) {
+export async function updateOrder(id, { status, trackingNumber, paymentStatus }, stockRestoreStatuses) {
   const [[order]] = await pool.query('SELECT * FROM orders WHERE id = ?', [id]);
   if (!order) return null;
 
@@ -888,6 +958,10 @@ export async function updateOrder(id, { status, trackingNumber }, stockRestoreSt
       String(trackingNumber).trim(),
       id,
     ]);
+  }
+
+  if (paymentStatus && paymentStatus !== order.payment_status) {
+    await pool.query('UPDATE orders SET payment_status = ? WHERE id = ?', [paymentStatus, id]);
   }
 
   if (status && status !== order.status) {
@@ -945,7 +1019,14 @@ export async function getAdminStats() {
   };
 }
 
-export async function saveAdminSession(token, expires) {
+export async function saveAdminSession(token, expires, userId = null) {
+  if (userId) {
+    await pool.query(
+      'INSERT INTO user_sessions (token, user_id, expires_at) VALUES (?, ?, ?) ON DUPLICATE KEY UPDATE expires_at = ?',
+      [token, userId, expires, expires]
+    );
+    return;
+  }
   await pool.query(
     'INSERT INTO admin_sessions (token, expires_at) VALUES (?, ?) ON DUPLICATE KEY UPDATE expires_at = ?',
     [token, expires, expires]
@@ -954,18 +1035,127 @@ export async function saveAdminSession(token, expires) {
 
 export async function deleteAdminSession(token) {
   await pool.query('DELETE FROM admin_sessions WHERE token = ?', [token]);
+  await pool.query('DELETE FROM user_sessions WHERE token = ?', [token]);
 }
 
 export async function getAdminSession(token) {
-  const [[row]] = await pool.query('SELECT expires_at FROM admin_sessions WHERE token = ?', [
-    token,
-  ]);
+  const [[userRow]] = await pool.query(
+    `SELECT s.expires_at, u.id, u.email, u.name, u.phone, u.role
+     FROM user_sessions s JOIN users u ON u.id = s.user_id
+     WHERE s.token = ?`,
+    [token]
+  );
+  if (userRow) {
+    return {
+      expires: Number(userRow.expires_at),
+      userId: userRow.id,
+      email: userRow.email,
+      name: userRow.name,
+      phone: userRow.phone,
+      role: userRow.role,
+    };
+  }
+  const [[row]] = await pool.query('SELECT expires_at FROM admin_sessions WHERE token = ?', [token]);
   if (!row) return null;
-  return { expires: Number(row.expires_at) };
+  return { expires: Number(row.expires_at), role: 'admin' };
 }
 
 export async function cleanExpiredSessions() {
-  await pool.query('DELETE FROM admin_sessions WHERE expires_at < ?', [Date.now()]);
+  const now = Date.now();
+  await pool.query('DELETE FROM admin_sessions WHERE expires_at < ?', [now]);
+  await pool.query('DELETE FROM user_sessions WHERE expires_at < ?', [now]);
+}
+
+export async function getUserByEmail(email) {
+  const [[row]] = await pool.query('SELECT * FROM users WHERE email = ?', [email.toLowerCase()]);
+  if (!row) return null;
+  return mapUser(row);
+}
+
+export async function getUserById(id) {
+  const [[row]] = await pool.query('SELECT * FROM users WHERE id = ?', [id]);
+  if (!row) return null;
+  return mapUser(row);
+}
+
+function mapUser(row) {
+  return {
+    id: row.id,
+    email: row.email,
+    name: row.name,
+    phone: row.phone || '',
+    address: row.address || '',
+    city: row.city || '',
+    role: row.role,
+    passwordHash: row.password_hash,
+    createdAt: row.created_at,
+  };
+}
+
+export async function createUser({ email, password, name, phone, address, city, role = 'customer' }) {
+  const normalized = email.trim().toLowerCase();
+  const [[existing]] = await pool.query('SELECT id FROM users WHERE email = ?', [normalized]);
+  if (existing) throw new Error('כבר קיים משתמש עם אימייל זה');
+
+  const passwordHash = await hashPassword(password);
+  const [result] = await pool.query(
+    'INSERT INTO users (email, password_hash, name, phone, address, city, role) VALUES (?, ?, ?, ?, ?, ?, ?)',
+    [normalized, passwordHash, name.trim(), phone?.trim() || '', address?.trim() || '', city?.trim() || '', role]
+  );
+  return getUserById(result.insertId);
+}
+
+/** עדכון פרטי פרופיל של לקוח (שם, טלפון, כתובת, עיר) */
+export async function updateUserProfile(id, { name, phone, address, city }) {
+  await pool.query(
+    'UPDATE users SET name = ?, phone = ?, address = ?, city = ? WHERE id = ?',
+    [
+      (name ?? '').trim(),
+      (phone ?? '').trim(),
+      (address ?? '').trim(),
+      (city ?? '').trim(),
+      id,
+    ]
+  );
+  return getUserById(id);
+}
+
+/** שמירת פרטי המשלוח האחרונים על הפרופיל, כדי שימולאו אוטומטית בפעם הבאה */
+export async function saveUserContactFromOrder(userId, orderData) {
+  if (!userId) return;
+  try {
+    await pool.query(
+      `UPDATE users
+       SET name = ?, phone = ?, address = ?, city = ?
+       WHERE id = ?`,
+      [
+        orderData.name || '',
+        orderData.phone || '',
+        orderData.address || '',
+        orderData.city || '',
+        userId,
+      ]
+    );
+  } catch {
+    /* best-effort */
+  }
+}
+
+export async function getOrdersByEmail(email) {
+  const [rows] = await pool.query(
+    'SELECT * FROM orders WHERE email = ? ORDER BY created_at DESC',
+    [email.toLowerCase()]
+  );
+  const result = [];
+  for (const row of rows) {
+    const [items] = await pool.query('SELECT * FROM order_items WHERE order_id = ?', [row.id]);
+    const [history] = await pool.query(
+      'SELECT * FROM order_status_history WHERE order_id = ? ORDER BY created_at',
+      [row.id]
+    );
+    result.push(await mapOrder(row, items, history));
+  }
+  return result;
 }
 
 export { pool };

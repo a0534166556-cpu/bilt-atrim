@@ -161,7 +161,7 @@ export default function ProductDetail() {
   return (
     <>
       <Helmet>
-        <title>{`${productTitle || 'מוצר'} | מרקט גוגל`}</title>
+        <title>{`${productTitle || 'מוצר'} | NovaShop`}</title>
         <meta name="description" content={productDescription} />
         <script type="application/ld+json">{JSON.stringify(jsonLd)}</script>
       </Helmet>
@@ -175,6 +175,7 @@ export default function ProductDetail() {
               images={galleryImages}
               videos={galleryVideos}
               productName={productTitle}
+              productId={product.id}
             />
           </div>
           <div className="product-detail-info">

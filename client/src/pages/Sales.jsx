@@ -18,7 +18,7 @@ export default function Sales() {
   return (
     <>
       <Helmet>
-        <title>מבצעים והנחות | מרקט גוגל</title>
+        <title>מבצעים והנחות | NovaShop</title>
         <meta name="description" content="כל המוצרים במבצע עם הנחות מיוחדות" />
       </Helmet>
       <div className="container page sales-page">

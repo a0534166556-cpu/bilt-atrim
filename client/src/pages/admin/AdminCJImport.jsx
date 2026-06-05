@@ -9,6 +9,7 @@ import {
   adminCjRecalculatePrices,
   adminCjRetranslateDescriptions,
   adminCjRefreshVideos,
+  adminCjCleanVideos,
   fetchCategories,
   formatPrice,
 } from '../../api';
@@ -32,6 +33,7 @@ export default function AdminCJImport() {
   const [recalcPrices, setRecalcPrices] = useState(false);
   const [retranslateDesc, setRetranslateDesc] = useState(false);
   const [refreshVideos, setRefreshVideos] = useState(false);
+  const [cleaningVideos, setCleaningVideos] = useState(false);
   const [translateToHebrew, setTranslateToHebrew] = useState(true);
 
   useEffect(() => {
@@ -69,6 +71,18 @@ export default function AdminCJImport() {
       showToast(err.message, 'error');
     } finally {
       setRefreshVideos(false);
+    }
+  };
+
+  const cleanVideos = async () => {
+    setCleaningVideos(true);
+    try {
+      const data = await adminCjCleanVideos();
+      showToast(`נוקו סרטונים שבורים מ-${data.cleaned} מוצרים (${data.totalRemoved} הוסרו)`);
+    } catch (err) {
+      showToast(err.message, 'error');
+    } finally {
+      setCleaningVideos(false);
     }
   };
 
@@ -250,6 +264,14 @@ export default function AdminCJImport() {
                 onClick={fixVideos}
               >
                 {refreshVideos ? 'מרענן סרטונים...' : 'רענן סרטונים (3+ מ-CJ)'}
+              </button>
+              <button
+                type="button"
+                className="btn btn-outline"
+                disabled={cleaningVideos}
+                onClick={cleanVideos}
+              >
+                {cleaningVideos ? 'מנקה סרטונים...' : 'נקה סרטונים שבורים'}
               </button>
               <button
                 type="button"

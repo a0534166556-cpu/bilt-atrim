@@ -40,6 +40,21 @@ export default function AdminOrders() {
     }
   };
 
+  const markPaid = async (id) => {
+    try {
+      await adminUpdateOrderStatus(id, { paymentStatus: 'paid' });
+      showToast('סומן כשולם');
+      load();
+    } catch (err) {
+      showToast(err.message, 'error');
+    }
+  };
+
+  const copyAddress = (o) => {
+    const text = `${o.name}\n${o.phone}\n${o.address}${o.city ? `, ${o.city}` : ''}\n${o.email}`;
+    navigator.clipboard.writeText(text).then(() => showToast('כתובת הועתקה'));
+  };
+
   const exportCsv = async () => {
     try {
       await exportOrdersCsv();
@@ -111,6 +126,11 @@ export default function AdminOrders() {
                 <span className={`status-badge status-${o.paymentStatus === 'paid' ? 'success' : 'warning'}`}>
                   {PAYMENT_STATUS_LABELS[o.paymentStatus] || o.paymentStatus}
                 </span>
+                {o.paymentMethod === 'cod' && o.paymentStatus !== 'paid' && (
+                  <button type="button" className="btn btn-sm btn-outline" onClick={() => markPaid(o.id)}>
+                    סמן שולם
+                  </button>
+                )}
               </td>
               <td>
                 <span className={`status-badge status-${ORDER_STATUS[o.status]?.color}`}>
@@ -131,6 +151,9 @@ export default function AdminOrders() {
               </td>
               <td>{new Date(o.createdAt).toLocaleString('he-IL')}</td>
               <td>
+                <button type="button" className="btn btn-sm btn-outline" onClick={() => copyAddress(o)}>
+                  העתק כתובת
+                </button>
                 <select
                   value={o.status}
                   onChange={(e) => updateStatus(o.id, e.target.value)}

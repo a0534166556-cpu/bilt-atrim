@@ -5,12 +5,43 @@ import {
   extractShippingUsd,
   extractCostUsd,
   getDefaultFallbackRetailIls,
+  DEFAULT_MARKUP_PERCENT,
 } from './pricing.js';
 import {
   isPlayableCjVideoUrl,
   normalizeCjVideoUrl,
+  checkVideoIsLive,
   MIN_PRODUCT_VIDEOS,
 } from './media.js';
+
+/** מחלץ את כתובת ה-CJ האמיתית, גם אם נשמרה בפורמט proxy */
+function resolveRealVideoUrl(v) {
+  if (typeof v === 'string') return v;
+  if (v?.originalUrl) return v.originalUrl;
+  const url = v?.url || '';
+  const m = url.match(/[?&]url=([^&]+)/);
+  if (m) {
+    try {
+      return decodeURIComponent(m[1]);
+    } catch {
+      return url;
+    }
+  }
+  return url;
+}
+
+/** משאיר רק סרטונים שבאמת מגישים וידאו (200) – מסיר קישורים מתים/פגי תוקף */
+async function filterLiveVideos(videos = []) {
+  const live = [];
+  for (const v of videos) {
+    const real = resolveRealVideoUrl(v);
+    if (!real || !isPlayableCjVideoUrl(real)) continue;
+    if (await checkVideoIsLive(real)) {
+      live.push(typeof v === 'string' ? { url: real } : { ...v, url: real });
+    }
+  }
+  return live;
+}
 
 const CJ_BASE = 'https://developers.cjdropshipping.com/api2.0/v1';
 
@@ -432,13 +463,12 @@ export function clearMyProductPriceCache() {
 }
 
 /** מחיר ישן / שגוי במסד (כולל נוסחה ישנה עם משלוח כפול) */
-export function isLikelyStaleCjPrice(price, markupPercent = 30) {
+export function isLikelyStaleCjPrice(price, markupPercent = DEFAULT_MARKUP_PERCENT) {
   const n = Number(price);
   if (!Number.isFinite(n) || n <= 0) return true;
   if (n < 8) return true;
   const fallback = getDefaultFallbackRetailIls(markupPercent);
   if (fallback != null && n === fallback) return true;
-  if (n >= 18 && n <= 30) return true;
   return false;
 }
 
@@ -450,7 +480,7 @@ async function resolveCostUsd(detail, cjPid) {
 }
 
 /** מעדכן מחירי מכירה בשקלים לכל המוצרים מ-CJ שכבר בחנות */
-export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = false } = {}) {
+export async function recalculateAllCjPrices(markupPercent = DEFAULT_MARKUP_PERCENT, { onlyStale = false } = {}) {
   clearMyProductPriceCache();
   const { getAllProducts, updateProduct } = await import('./db.js');
   const products = await getAllProducts();
@@ -482,7 +512,7 @@ export async function recalculateAllCjPrices(markupPercent = 30, { onlyStale = f
   return results;
 }
 
-export async function recalculateStaleCjPrices(markupPercent = 30) {
+export async function recalculateStaleCjPrices(markupPercent = DEFAULT_MARKUP_PERCENT) {
   return recalculateAllCjPrices(markupPercent, { onlyStale: true });
 }
 
@@ -516,13 +546,15 @@ export async function refreshStaleCjVideos({ forceAll = false } = {}) {
     if (!forceAll && !needsVideoRefresh(p)) continue;
     try {
       const detail = await getCjProductDetail(p.cjPid);
-      const videos = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
+      const candidates = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
+      const videos = await filterLiveVideos(candidates);
       if (!videos.length) {
+        await updateProduct(p.id, { videoUrl: '', videos: [] });
         results.push({ id: p.id, status: 'no-videos' });
         continue;
       }
       await updateProduct(p.id, {
-        videoUrl: videos[0]?.url || detail.videoUrl,
+        videoUrl: videos[0]?.url || '',
         videos,
       });
       results.push({ id: p.id, status: 'ok', count: videos.length });
@@ -534,13 +566,90 @@ export async function refreshStaleCjVideos({ forceAll = false } = {}) {
   return results;
 }
 
+/** עובר על כל המוצרים, בודק את הסרטונים השמורים ומסיר קישורים מתים (בלי קריאה ל-CJ) */
+export async function cleanDeadCjVideos() {
+  const { getAllProducts, updateProduct } = await import('./db.js');
+  const products = await getAllProducts();
+  const results = [];
+
+  for (const p of products) {
+    const stored = (p.videos || [])
+      .map((v) => (typeof v === 'string' ? { url: v } : v))
+      .filter((v) => v?.url);
+    if (!stored.length && !p.videoUrl) continue;
+
+    const live = await filterLiveVideos(stored);
+    if (live.length !== stored.length) {
+      await updateProduct(p.id, {
+        videoUrl: live[0]?.url || '',
+        videos: live,
+      });
+      results.push({ id: p.id, removed: stored.length - live.length, kept: live.length });
+    }
+  }
+  return results;
+}
+
 export async function refreshAllCjVideos() {
   return refreshStaleCjVideos({ forceAll: true });
 }
 
+/** בודק חיות של הסרטונים השמורים; מוצרים עם סרטון מת/חסר → מושך טרי מ-CJ */
+export async function revalidateAndRefreshVideos() {
+  const { getAllProducts, getProductById, updateProduct } = await import('./db.js');
+  const products = (await getAllProducts()).filter((p) => p.cjPid);
+  const results = [];
+
+  for (const p of products) {
+    const stored = (p.videos || [])
+      .map((v) => (typeof v === 'string' ? { url: v } : v))
+      .filter((v) => v?.url);
+    const live = await filterLiveVideos(stored);
+
+    if (live.length >= MIN_PRODUCT_VIDEOS && live.length === stored.length) {
+      continue;
+    }
+
+    try {
+      const detail = await getCjProductDetail(p.cjPid);
+      const candidates = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
+      const fresh = await filterLiveVideos(candidates);
+      const finalVideos = fresh.length ? fresh : live;
+      await updateProduct(p.id, {
+        videoUrl: finalVideos[0]?.url || '',
+        videos: finalVideos,
+      });
+      results.push({ id: p.id, status: 'ok', count: finalVideos.length });
+      await new Promise((r) => setTimeout(r, 400));
+    } catch (err) {
+      if (live.length !== stored.length) {
+        await updateProduct(p.id, { videoUrl: live[0]?.url || '', videos: live });
+      }
+      results.push({ id: p.id, status: 'error', error: err.message });
+    }
+  }
+  return results;
+}
+
+/** מושך כתובות סרטון טריות מ-CJ למוצר יחיד, מאמת ושומר. מחזיר את הסרטונים החיים */
+export async function refreshProductVideos(productId) {
+  const { getProductById, updateProduct } = await import('./db.js');
+  const product = await getProductById(productId);
+  if (!product?.cjPid) return null;
+
+  const detail = await getCjProductDetail(product.cjPid);
+  const candidates = (detail.videos || []).filter((v) => isPlayableCjVideoUrl(v.url));
+  const videos = await filterLiveVideos(candidates);
+  await updateProduct(product.id, {
+    videoUrl: videos[0]?.url || '',
+    videos,
+  });
+  return videos;
+}
+
 export async function importCjProducts(
   pids,
-  { markupPercent = 30, categoryId = 'electronics', translateToHebrew = true } = {}
+  { markupPercent = DEFAULT_MARKUP_PERCENT, categoryId = 'electronics', translateToHebrew = true } = {}
 ) {
   const doTranslate = translateToHebrew !== false;
   clearMyProductPriceCache();
@@ -548,7 +657,7 @@ export async function importCjProducts(
   const skipped = [];
 
   const markup = Number(markupPercent);
-  const validMarkup = Number.isFinite(markup) ? markup : 30;
+  const validMarkup = Number.isFinite(markup) ? markup : DEFAULT_MARKUP_PERCENT;
 
   for (const pid of pids) {
     if (!pid) continue;
@@ -591,7 +700,7 @@ export async function importCjProducts(
 }
 
 export async function syncMyCjProductsToStore({
-  markupPercent = 30,
+  markupPercent = DEFAULT_MARKUP_PERCENT,
   categoryId = 'electronics',
   translateToHebrew = true,
 } = {}) {

@@ -3,12 +3,15 @@ import { useState } from 'react';
 import { useCart } from '../context/CartContext';
 import { useWishlist } from '../context/WishlistContext';
 import { useStore } from '../context/StoreContext';
+import { useAuth } from '../context/AuthContext';
 import PromoBanner from './PromoBanner';
+import CookieBanner from './CookieBanner';
 
 export default function Layout({ children }) {
   const { count } = useCart();
   const { count: wishCount } = useWishlist();
   const { store } = useStore();
+  const { user } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const [query, setQuery] = useState('');
@@ -25,7 +28,7 @@ export default function Layout({ children }) {
 
   if (isAdmin) return <div className="app admin-app">{children}</div>;
 
-  const storeName = store?.name || 'מרקט גוגל';
+  const storeName = store?.name || 'NovaShop';
 
   return (
     <div className="app">
@@ -39,7 +42,7 @@ export default function Layout({ children }) {
       <header className="header">
         <div className="container header-inner">
           <Link to="/" className="logo">
-            <span className="logo-icon">G</span>
+            <span className="logo-icon">{storeName.charAt(0)}</span>
             <span>{storeName}</span>
           </Link>
 
@@ -63,15 +66,15 @@ export default function Layout({ children }) {
             <Link to="/wishlist" onClick={() => setMenuOpen(false)}>מועדפים ({wishCount})</Link>
             <Link to="/track-order" onClick={() => setMenuOpen(false)}>מעקב הזמנה</Link>
             <Link to="/contact" onClick={() => setMenuOpen(false)}>צור קשר</Link>
+            {user ? (
+              <Link to={user.role === 'admin' ? '/admin' : '/account'} onClick={() => setMenuOpen(false)}>
+                {user.role === 'admin' ? 'ניהול' : 'החשבון שלי'}
+              </Link>
+            ) : (
+              <Link to="/login" onClick={() => setMenuOpen(false)}>התחברות</Link>
+            )}
             <Link to="/cart" className="cart-link" onClick={() => setMenuOpen(false)}>
               🛒 סל ({count})
-            </Link>
-            <Link
-              to={localStorage.getItem('adminToken') ? '/admin' : '/admin/login'}
-              className="admin-link"
-              onClick={() => setMenuOpen(false)}
-            >
-              ניהול
             </Link>
           </nav>
         </div>
@@ -102,7 +105,10 @@ export default function Layout({ children }) {
             <Link to="/contact">צור קשר</Link>
           </div>
           <div>
-            <h4>יצירת קשר</h4>
+            <h4>משפטי</h4>
+            <Link to="/privacy">מדיניות פרטיות</Link>
+            <Link to="/terms">תנאי שימוש</Link>
+            <h4 style={{ marginTop: '1rem' }}>יצירת קשר</h4>
             {store?.email && <p>✉️ {store.email}</p>}
             {store?.phone && <p>📞 {store.phone}</p>}
             {store?.whatsapp && (
@@ -119,6 +125,8 @@ export default function Layout({ children }) {
         </div>
         <p className="copyright">© {new Date().getFullYear()} {storeName}</p>
       </footer>
+
+      <CookieBanner />
     </div>
   );
 }

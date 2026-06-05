@@ -3,8 +3,6 @@ import { Link } from 'react-router-dom';
 import { Helmet } from 'react-helmet-async';
 import { useCart } from '../context/CartContext';
 import { fetchProducts, formatPrice } from '../api';
-import FreeShippingBar from '../components/FreeShippingBar';
-
 export default function Cart() {
   const { items, updateQuantity, removeItem, total, syncWithCatalog } = useCart();
   const [syncing, setSyncing] = useState(false);
@@ -34,7 +32,7 @@ export default function Cart() {
   if (items.length === 0) {
     return (
       <div className="container page empty-cart">
-        <Helmet><title>{'סל קניות | מרקט גוגל'}</title></Helmet>
+        <Helmet><title>{'סל קניות | NovaShop'}</title></Helmet>
         <h1>הסל ריק</h1>
         <p>עדיין לא הוספת מוצרים</p>
         <Link to="/products" className="btn btn-primary">המשך קניות</Link>
@@ -46,7 +44,7 @@ export default function Cart() {
 
   return (
     <>
-      <Helmet><title>{`סל קניות (${itemCount}) | מרקט גוגל`}</title></Helmet>
+      <Helmet><title>{`סל קניות (${itemCount}) | NovaShop`}</title></Helmet>
       <div className="container page cart-page">
         <h1>סל קניות</h1>
         {syncing && <p className="loading-inline">מעדכן מחירים...</p>}
@@ -110,12 +108,15 @@ export default function Cart() {
 
           <aside className="cart-summary">
             <h2>סיכום הזמנה</h2>
-            <FreeShippingBar subtotal={total} />
             <div className="summary-row">
               <span>פריטים ({itemCount})</span>
               <span>{formatPrice(total)}</span>
             </div>
-            <p className="cart-summary-note">משלוח יחושב בשלב הבא</p>
+            <div className="summary-row">
+              <span>משלוח</span>
+              <span>חינם!</span>
+            </div>
+            <p className="cart-summary-note">🚚 משלוח חינם על כל ההזמנות</p>
             <Link to="/checkout" className="btn btn-primary btn-block">
               להמשך לתשלום
             </Link>

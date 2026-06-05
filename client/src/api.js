@@ -1,8 +1,12 @@
 const API = '/api';
 
+function getAuthToken() {
+  return localStorage.getItem('authToken') || localStorage.getItem('adminToken');
+}
+
 async function request(url, options = {}) {
   const headers = { 'Content-Type': 'application/json', ...options.headers };
-  const token = localStorage.getItem('adminToken');
+  const token = getAuthToken();
   if (token) headers.Authorization = `Bearer ${token}`;
   const res = await fetch(url, { ...options, headers });
   const text = await res.text();
@@ -41,6 +45,10 @@ export async function fetchProduct(id) {
 
 export async function fetchRelated(id) {
   return request(`${API}/products/${id}/related`);
+}
+
+export async function refreshProductVideos(id) {
+  return request(`${API}/products/${id}/refresh-videos`, { method: 'POST' });
 }
 
 export async function fetchCategories() {
@@ -89,8 +97,45 @@ export async function createOrder(order) {
   return request(`${API}/orders`, { method: 'POST', body: JSON.stringify(order) });
 }
 
+export async function submitContact(form) {
+  return request(`${API}/contact`, { method: 'POST', body: JSON.stringify(form) });
+}
+
 export async function trackOrder(orderId, email) {
   return request(`${API}/orders/track?orderId=${orderId}&email=${encodeURIComponent(email)}`);
+}
+
+export async function loginUser(email, password) {
+  return request(`${API}/auth/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
+}
+
+export async function registerUser({ name, email, phone, address, city, password }) {
+  return request(`${API}/auth/register`, {
+    method: 'POST',
+    body: JSON.stringify({ name, email, phone, address, city, password }),
+  });
+}
+
+export async function fetchMe() {
+  return request(`${API}/auth/me`);
+}
+
+export async function logoutUser() {
+  return request(`${API}/auth/logout`, { method: 'POST' });
+}
+
+export async function fetchAccountOrders() {
+  return request(`${API}/account/orders`);
+}
+
+export async function updateProfile({ name, phone, address, city }) {
+  return request(`${API}/account/profile`, {
+    method: 'PUT',
+    body: JSON.stringify({ name, phone, address, city }),
+  });
 }
 
 export async function translateProductContent({ name, description }, direction = 'toEnglish') {
@@ -100,8 +145,11 @@ export async function translateProductContent({ name, description }, direction =
   });
 }
 
-export async function adminLogin(password) {
-  return request(`${API}/admin/login`, { method: 'POST', body: JSON.stringify({ password }) });
+export async function adminLogin(email, password) {
+  return request(`${API}/admin/login`, {
+    method: 'POST',
+    body: JSON.stringify({ email, password }),
+  });
 }
 
 export async function adminStats() {
@@ -133,7 +181,7 @@ export async function adminUpdateOrderStatus(id, updates) {
 }
 
 export async function exportOrdersCsv() {
-  const token = localStorage.getItem('adminToken');
+  const token = getAuthToken();
   const res = await fetch(`${API}/admin/export/orders`, {
     headers: { Authorization: `Bearer ${token}` },
   });
@@ -215,6 +263,10 @@ export async function adminCjRefreshVideos() {
     method: 'POST',
     body: JSON.stringify({ forceAll: true }),
   });
+}
+
+export async function adminCjCleanVideos() {
+  return request(`${API}/admin/cj/clean-videos`, { method: 'POST' });
 }
 
 export async function adminTranslateProduct(id) {

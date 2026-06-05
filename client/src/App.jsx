@@ -11,9 +11,14 @@ import OrderSuccess from './pages/OrderSuccess';
 import Wishlist from './pages/Wishlist';
 import TrackOrder from './pages/TrackOrder';
 import Contact from './pages/Contact';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import Account from './pages/Account';
 import Sales from './pages/Sales';
 import ShippingInfo from './pages/ShippingInfo';
 import ReturnsPolicy from './pages/ReturnsPolicy';
+import PrivacyPolicy from './pages/PrivacyPolicy';
+import TermsOfService from './pages/TermsOfService';
 import AdminLogin from './pages/admin/AdminLogin';
 import AdminDashboard from './pages/admin/AdminDashboard';
 import AdminProducts from './pages/admin/AdminProducts';
@@ -39,8 +44,13 @@ export default function App() {
         <Route path="/wishlist" element={<Wishlist />} />
         <Route path="/track-order" element={<TrackOrder />} />
         <Route path="/contact" element={<Contact />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/account" element={<Account />} />
         <Route path="/shipping" element={<ShippingInfo />} />
         <Route path="/returns" element={<ReturnsPolicy />} />
+        <Route path="/privacy" element={<PrivacyPolicy />} />
+        <Route path="/terms" element={<TermsOfService />} />
         <Route path="/admin/login" element={<AdminLogin />} />
         <Route path="/admin" element={<ProtectedAdmin><AdminDashboard /></ProtectedAdmin>} />
         <Route

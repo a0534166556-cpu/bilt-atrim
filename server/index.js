@@ -36,8 +36,14 @@ import {
   getEffectivePrice,
   importCjProductsToStore,
   deleteDemoProducts,
+  getUserByEmail,
+  getUserById,
+  createUser,
+  updateUserProfile,
+  getOrdersByEmail,
 } from './db.js';
-import { isEmailConfigured, notifyOrderConfirmation, notifyOrderShipped } from './email.js';
+import { verifyPassword, createSessionToken } from './auth.js';
+import { isEmailConfigured, notifyOrderConfirmation, notifyOrderShipped, notifyAdminNewOrder, sendContactFormEmail } from './email.js';
 import {
   translateToHebrew,
   translateProductFields,
@@ -56,8 +62,12 @@ import {
   recalculateStaleCjPrices,
   refreshStaleCjVideos,
   refreshAllCjVideos,
+  refreshProductVideos,
+  revalidateAndRefreshVideos,
+  cleanDeadCjVideos,
   getCjProductDetail,
 } from './cj.js';
+import { DEFAULT_MARKUP_PERCENT } from './pricing.js';
 import {
   getPaymentConfig,
   createStripeCheckoutSession,
@@ -175,17 +185,164 @@ function filterPublicProducts(products, query = {}) {
   return list;
 }
 
-async function requireAdmin(req, res, next) {
+async function getSessionFromRequest(req) {
   await cleanExpiredSessions();
   const token = req.headers.authorization?.replace('Bearer ', '');
-  if (!token) return res.status(401).json({ error: 'נדרשת התחברות מנהל' });
+  if (!token) return null;
   const session = await getAdminSession(token);
   if (!session || Date.now() > session.expires) {
     if (token) await deleteAdminSession(token);
-    return res.status(401).json({ error: 'פג תוקף ההתחברות' });
+    return null;
   }
+  return { token, ...session };
+}
+
+async function requireAuth(req, res, next) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'נדרשת התחברות' });
+  req.user = session;
   next();
 }
+
+async function requireAdmin(req, res, next) {
+  const session = await getSessionFromRequest(req);
+  if (!session) return res.status(401).json({ error: 'נדרשת התחברות מנהל' });
+  if (session.role !== 'admin') {
+    return res.status(403).json({ error: 'אין הרשאת מנהל' });
+  }
+  req.user = session;
+  next();
+}
+
+function publicUser(user) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    phone: user.phone,
+    address: user.address || '',
+    city: user.city || '',
+    role: user.role,
+  };
+}
+
+function orderUserId(req) {
+  return req.user?.userId && req.user.role === 'customer' ? req.user.userId : null;
+}
+
+app.post(
+  '/api/auth/register',
+  asyncHandler(async (req, res) => {
+    const { name, email, phone, address, city, password } = req.body || {};
+    if (!name?.trim() || !email?.trim() || !password) {
+      return res.status(400).json({ error: 'יש למלא שם, אימייל וסיסמה' });
+    }
+    if (password.length < 6) {
+      return res.status(400).json({ error: 'סיסמה – לפחות 6 תווים' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'אימייל לא תקין' });
+    }
+    const user = await createUser({
+      name: name.trim(),
+      email: email.trim(),
+      phone: phone?.trim(),
+      address: address?.trim(),
+      city: city?.trim(),
+      password,
+      role: 'customer',
+    });
+    const token = createSessionToken();
+    const expires = Date.now() + 30 * 24 * 60 * 60 * 1000;
+    await saveAdminSession(token, expires, user.id);
+    res.status(201).json({ token, user: publicUser(user) });
+  })
+);
+
+app.post(
+  '/api/auth/login',
+  asyncHandler(async (req, res) => {
+    const { email, password } = req.body || {};
+    if (!email?.trim() || !password) {
+      return res.status(400).json({ error: 'יש למלא אימייל וסיסמה' });
+    }
+    const user = await getUserByEmail(email.trim());
+    if (!user || !(await verifyPassword(password, user.passwordHash))) {
+      return res.status(401).json({ error: 'אימייל או סיסמה שגויים' });
+    }
+    const token = createSessionToken();
+    const expires =
+      user.role === 'admin'
+        ? Date.now() + 24 * 60 * 60 * 1000
+        : Date.now() + 30 * 24 * 60 * 60 * 1000;
+    await saveAdminSession(token, expires, user.id);
+    res.json({ token, user: publicUser(user) });
+  })
+);
+
+app.get(
+  '/api/auth/me',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (req.user.userId) {
+      const fresh = await getUserById(req.user.userId);
+      if (fresh) return res.json({ user: publicUser(fresh) });
+    }
+    res.json({
+      user: {
+        id: req.user.userId,
+        email: req.user.email,
+        name: req.user.name,
+        phone: req.user.phone,
+        address: '',
+        city: '',
+        role: req.user.role,
+      },
+    });
+  })
+);
+
+app.put(
+  '/api/account/profile',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== 'customer' || !req.user.userId) {
+      return res.status(403).json({ error: 'זמין ללקוחות בלבד' });
+    }
+    const { name, phone, address, city } = req.body || {};
+    if (!name?.trim()) {
+      return res.status(400).json({ error: 'יש למלא שם' });
+    }
+    const updated = await updateUserProfile(req.user.userId, {
+      name,
+      phone,
+      address,
+      city,
+    });
+    res.json({ user: publicUser(updated) });
+  })
+);
+
+app.post(
+  '/api/auth/logout',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (req.user.token) await deleteAdminSession(req.user.token);
+    res.json({ ok: true });
+  })
+);
+
+app.get(
+  '/api/account/orders',
+  requireAuth,
+  asyncHandler(async (req, res) => {
+    if (req.user.role !== 'customer') {
+      return res.status(403).json({ error: 'זמין ללקוחות בלבד' });
+    }
+    const orders = await getOrdersByEmail(req.user.email);
+    res.json(orders);
+  })
+);
 
 app.get('/api/store', asyncHandler(async (req, res) => {
   res.json(await getStore());
@@ -232,6 +389,38 @@ app.get(
     if (!product || !product.active) return res.status(404).json({ error: 'מוצר לא נמצא' });
     const reviews = await getReviews();
     res.json(enrichProduct(product, reviews));
+  })
+);
+
+const videoRefreshAt = new Map();
+
+app.post(
+  '/api/products/:id/refresh-videos',
+  asyncHandler(async (req, res) => {
+    const id = Number(req.params.id);
+    if (!Number.isFinite(id)) return res.status(400).json({ error: 'מזהה לא תקין' });
+
+    const product = await getProductById(id);
+    if (!product) return res.status(404).json({ error: 'מוצר לא נמצא' });
+
+    if (!isCjConfigured() || !product.cjPid) {
+      return res.json({ videos: mapProductMediaForClient(product).videos });
+    }
+
+    const last = videoRefreshAt.get(id) || 0;
+    if (Date.now() - last < 60_000) {
+      const fresh = await getProductById(id);
+      return res.json({ videos: mapProductMediaForClient(fresh).videos });
+    }
+    videoRefreshAt.set(id, Date.now());
+
+    try {
+      await refreshProductVideos(id);
+    } catch (err) {
+      console.warn('refresh-videos on demand:', err.message);
+    }
+    const fresh = await getProductById(id);
+    res.json({ videos: mapProductMediaForClient(fresh).videos });
   })
 );
 
@@ -300,6 +489,30 @@ app.post(
   })
 );
 
+app.post(
+  '/api/contact',
+  asyncHandler(async (req, res) => {
+    const { name, email, message } = req.body || {};
+    if (!name?.trim() || !email?.trim() || !message?.trim()) {
+      return res.status(400).json({ error: 'יש למלא שם, אימייל והודעה' });
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) {
+      return res.status(400).json({ error: 'אימייל לא תקין' });
+    }
+    const store = await getStore();
+    if (!isEmailConfigured()) {
+      return res.status(503).json({ error: 'שליחת הודעות לא זמינה – צור קשר בטלפון או WhatsApp' });
+    }
+    await sendContactFormEmail({
+      name: name.trim(),
+      email: email.trim(),
+      message: message.trim(),
+      store,
+    });
+    res.json({ message: 'ההודעה נשלחה! נחזור אליך בהקדם' });
+  })
+);
+
 app.get('/api/payments/config', (req, res) => {
   res.json(getPaymentConfig());
 });
@@ -312,12 +525,19 @@ app.post(
     }
     const built = await buildOrderFromBody(req.body);
     if (built.error) return res.status(400).json({ error: built.error });
+    if (!req.body.acceptedTerms) {
+      return res.status(400).json({ error: 'יש לאשר את תנאי השימוש ומדיניות הפרטיות' });
+    }
+
+    const session = await getSessionFromRequest(req);
+    if (session) req.user = session;
 
     const { orderData, orderItems, total } = built;
     try {
       const orderId = await createOrder(orderData, orderItems, {
         paymentMethod: 'stripe',
         reserveStock: false,
+        userId: orderUserId(req),
       });
       const checkoutUrl = await createStripeCheckoutSession(orderId, orderData, orderItems);
       res.status(201).json({ orderId, checkoutUrl, total });
@@ -348,12 +568,21 @@ app.post(
 
     const built = await buildOrderFromBody(req.body);
     if (built.error) return res.status(400).json({ error: built.error });
+    if (!req.body.acceptedTerms) {
+      return res.status(400).json({ error: 'יש לאשר את תנאי השימוש ומדיניות הפרטיות' });
+    }
+
+    const session = await getSessionFromRequest(req);
+    if (session) req.user = session;
 
     try {
       const orderId = await createOrder(built.orderData, built.orderItems, {
         paymentMethod: 'cod',
         reserveStock: true,
+        userId: orderUserId(req),
       });
+      notifyOrderConfirmation(orderId).catch(() => {});
+      notifyAdminNewOrder(orderId).catch(() => {});
       res.status(201).json({
         orderId,
         message: 'ההזמנה התקבלה בהצלחה!',
@@ -382,13 +611,24 @@ app.get(
 app.post(
   '/api/admin/login',
   asyncHandler(async (req, res) => {
-    if (req.body.password !== ADMIN_PASSWORD) {
-      return res.status(401).json({ error: 'סיסמה שגויה' });
+    const { email, password } = req.body || {};
+    if (email?.trim() && password) {
+      const user = await getUserByEmail(email.trim());
+      if (user?.role === 'admin' && (await verifyPassword(password, user.passwordHash))) {
+        const token = createSessionToken();
+        const expires = Date.now() + 24 * 60 * 60 * 1000;
+        await saveAdminSession(token, expires, user.id);
+        return res.json({ token, user: publicUser(user) });
+      }
+      return res.status(401).json({ error: 'אימייל או סיסמה שגויים' });
     }
-    const token = crypto.randomBytes(32).toString('hex');
-    const expires = Date.now() + 24 * 60 * 60 * 1000;
-    await saveAdminSession(token, expires);
-    res.json({ token });
+    if (password === ADMIN_PASSWORD) {
+      const token = createSessionToken();
+      const expires = Date.now() + 24 * 60 * 60 * 1000;
+      await saveAdminSession(token, expires);
+      return res.json({ token, user: { role: 'admin' } });
+    }
+    return res.status(401).json({ error: 'יש למלא אימייל וסיסמה' });
   })
 );
 
@@ -604,7 +844,7 @@ app.post(
     }
     const {
       pids,
-      markupPercent = 30,
+      markupPercent = DEFAULT_MARKUP_PERCENT,
       categoryId = 'electronics',
       translateToHebrew = true,
     } = req.body;
@@ -612,7 +852,7 @@ app.post(
       return res.status(400).json({ error: 'בחר מוצרים לייבוא' });
     }
     const { imported, skipped } = await importCjProducts(pids, {
-      markupPercent: Number(markupPercent) || 30,
+      markupPercent: Number(markupPercent) || DEFAULT_MARKUP_PERCENT,
       categoryId,
       translateToHebrew: translateToHebrew !== false,
     });
@@ -665,6 +905,19 @@ app.post(
 );
 
 app.post(
+  '/api/admin/cj/clean-videos',
+  requireAdmin,
+  asyncHandler(async (req, res) => {
+    const results = await cleanDeadCjVideos();
+    res.json({
+      cleaned: results.length,
+      totalRemoved: results.reduce((sum, r) => sum + r.removed, 0),
+      details: results,
+    });
+  })
+);
+
+app.post(
   '/api/admin/cj/retranslate-descriptions',
   requireAdmin,
   asyncHandler(async (req, res) => {
@@ -711,8 +964,8 @@ app.post(
     if (!isCjConfigured()) {
       return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
     }
-    const { markupPercent = 30 } = req.body || {};
-    const results = await recalculateAllCjPrices(Number(markupPercent) || 30);
+    const { markupPercent = DEFAULT_MARKUP_PERCENT } = req.body || {};
+    const results = await recalculateAllCjPrices(Number(markupPercent) || DEFAULT_MARKUP_PERCENT);
     const ok = results.filter((r) => r.price != null);
     res.json({
       updated: ok.length,
@@ -730,13 +983,13 @@ app.post(
       return res.status(503).json({ error: 'הוסף CJ_ACCESS_TOKEN ב-Railway' });
     }
     const {
-      markupPercent = 30,
+      markupPercent = DEFAULT_MARKUP_PERCENT,
       categoryId = 'electronics',
       translateToHebrew = true,
     } = req.body || {};
     const cat = String(categoryId || 'electronics');
     const { myProducts, imported, skipped, message } = await syncMyCjProductsToStore({
-      markupPercent: Number(markupPercent) || 30,
+      markupPercent: Number(markupPercent) || DEFAULT_MARKUP_PERCENT,
       categoryId: cat,
       translateToHebrew: translateToHebrew !== false,
     });
@@ -809,6 +1062,13 @@ app.get(
     const urls = [
       { loc: SITE_URL, priority: '1.0' },
       { loc: `${SITE_URL}/products`, priority: '0.9' },
+      { loc: `${SITE_URL}/sales`, priority: '0.9' },
+      { loc: `${SITE_URL}/contact`, priority: '0.6' },
+      { loc: `${SITE_URL}/track-order`, priority: '0.6' },
+      { loc: `${SITE_URL}/shipping`, priority: '0.5' },
+      { loc: `${SITE_URL}/returns`, priority: '0.5' },
+      { loc: `${SITE_URL}/privacy`, priority: '0.4' },
+      { loc: `${SITE_URL}/terms`, priority: '0.4' },
       ...categories.map((c) => ({ loc: `${SITE_URL}/category/${c.id}`, priority: '0.8' })),
       ...products
         .filter((p) => p.active)
@@ -824,7 +1084,7 @@ ${urls.map((u) => `  <url><loc>${escapeXml(u.loc)}</loc><changefreq>weekly</chan
 );
 
 app.get('/robots.txt', (req, res) => {
-  res.type('text/plain').send(`User-agent: *\nAllow: /\n\nSitemap: ${API_URL}/sitemap.xml\n`);
+  res.type('text/plain').send(`User-agent: *\nAllow: /\n\nSitemap: ${SITE_URL}/sitemap.xml\n`);
 });
 
 app.get('/api/health', (req, res) => {
@@ -865,15 +1125,21 @@ async function start() {
   app.listen(PORT, () => {
     console.log(`Shop running on port ${PORT}`);
     console.log(`Google feed: ${SITE_URL}/feed/google-shopping.xml`);
+    if (!process.env.ADMIN_PASSWORD || process.env.ADMIN_PASSWORD === 'admin123') {
+      console.warn('⚠️  ADMIN_PASSWORD לא הוגדר או ברירת מחדל – שנה ב-Railway לפני פרסום!');
+    }
+    if (!isEmailConfigured()) {
+      console.warn('⚠️  SENDGRID_API_KEY / RESEND_API_KEY לא מוגדר – מיילים לא יישלחו');
+    }
     if (isCjConfigured()) {
-      recalculateStaleCjPrices(30)
+      recalculateAllCjPrices(DEFAULT_MARKUP_PERCENT)
         .then((rows) => {
           const ok = rows.filter((r) => r.price != null);
           if (ok.length) {
-            console.log(`CJ: תוקנו מחירים ישנים ל-${ok.length} מוצרים (דולר→שקל)`);
+            console.log(`CJ: עודכנו מחירים ל-${ok.length} מוצרים (עלות+משלוח ×1.25 → שקל)`);
           }
         })
-        .catch((err) => console.warn('CJ stale price fix:', err.message));
+        .catch((err) => console.warn('CJ price recalc:', err.message));
     }
     translateEnglishProductsInDb({ getAllProducts, updateProduct })
       .then((rows) => {
@@ -888,6 +1154,17 @@ async function start() {
           if (ok.length) console.log(`CJ: עודכנו סרטונים ל-${ok.length} מוצרים`);
         })
         .catch((err) => console.warn('CJ video refresh:', err.message));
+
+      const SIX_HOURS = 6 * 60 * 60 * 1000;
+      const timer = setInterval(() => {
+        revalidateAndRefreshVideos()
+          .then((rows) => {
+            const ok = rows.filter((r) => r.status === 'ok');
+            if (ok.length) console.log(`CJ: רענון תקופתי – חודשו סרטונים ל-${ok.length} מוצרים`);
+          })
+          .catch((err) => console.warn('CJ periodic video refresh:', err.message));
+      }, SIX_HOURS);
+      timer.unref?.();
     }
   });
 }
