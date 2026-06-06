@@ -492,19 +492,39 @@ export async function recalculateAllCjPrices(markupPercent = DEFAULT_MARKUP_PERC
 
   for (const p of cjProducts) {
     try {
-      const detail = await getCjProductDetail(p.cjPid);
-      const costUsd = await resolveCostUsd(detail, p.cjPid);
-      const retail = calculateRetailPriceIls(costUsd, {
-        markupPercent,
-        shippingUsd: detail.shippingUsd,
-      });
+      let costUsd = null;
+      let shippingUsd;
+      try {
+        const detail = await getCjProductDetail(p.cjPid);
+        costUsd = await resolveCostUsd(detail, p.cjPid);
+        shippingUsd = detail.shippingUsd;
+      } catch {
+        /* CJ unavailable – fall back to stored cost below */
+      }
+
+      let usedStored = false;
+      if (costUsd == null || !Number.isFinite(Number(costUsd)) || Number(costUsd) <= 0) {
+        costUsd = p.costUsd;
+        shippingUsd = p.shippingUsd;
+        usedStored = true;
+      }
+
+      const retail = calculateRetailPriceIls(costUsd, { markupPercent, shippingUsd });
       if (retail == null) {
-        results.push({ id: p.id, error: 'לא נמצא מחיר עלות ב-CJ' });
+        results.push({ id: p.id, error: 'לא נמצא מחיר עלות (גם לא שמור)' });
         continue;
       }
-      await updateProduct(p.id, { price: retail });
-      results.push({ id: p.id, name: p.name, price: retail, costUsd });
-      await new Promise((r) => setTimeout(r, 300));
+
+      const update = { price: retail };
+      if (!usedStored) {
+        update.costUsd = costUsd;
+        if (shippingUsd != null && Number.isFinite(Number(shippingUsd))) {
+          update.shippingUsd = shippingUsd;
+        }
+      }
+      await updateProduct(p.id, update);
+      results.push({ id: p.id, name: p.name, price: retail, costUsd, fromStored: usedStored });
+      if (!usedStored) await new Promise((r) => setTimeout(r, 300));
     } catch (err) {
       results.push({ id: p.id, error: err.message });
     }
@@ -514,6 +534,29 @@ export async function recalculateAllCjPrices(markupPercent = DEFAULT_MARKUP_PERC
 
 export async function recalculateStaleCjPrices(markupPercent = DEFAULT_MARKUP_PERCENT) {
   return recalculateAllCjPrices(markupPercent, { onlyStale: true });
+}
+
+/**
+ * חישוב מחיר מחדש מהעלות השמורה במסד – ללא פנייה ל-CJ.
+ * מהיר, יציב, ורץ בכל הפעלת שרת כדי שהמחירים תמיד יתאימו לנוסחה.
+ */
+export async function recalcPricesFromStoredCost(markupPercent = DEFAULT_MARKUP_PERCENT) {
+  const { getAllProducts, updateProduct } = await import('./db.js');
+  const products = await getAllProducts();
+  const results = [];
+  for (const p of products) {
+    if (p.costUsd == null || !Number.isFinite(Number(p.costUsd)) || Number(p.costUsd) <= 0) {
+      continue;
+    }
+    const retail = calculateRetailPriceIls(p.costUsd, {
+      markupPercent,
+      shippingUsd: p.shippingUsd,
+    });
+    if (retail == null || retail === p.price) continue;
+    await updateProduct(p.id, { price: retail });
+    results.push({ id: p.id, name: p.name, price: retail });
+  }
+  return results;
 }
 
 function getStoredVideoUrls(product) {

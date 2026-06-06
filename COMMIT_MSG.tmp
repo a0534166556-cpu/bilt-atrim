@@ -1,0 +1,6 @@
+Store CJ cost/shipping in DB for stable, self-healing pricing
+
+- Add cost_usd and shipping_usd columns to products (auto-migrated)
+- Persist cost+shipping on CJ import and whenever a CJ recalc succeeds
+- recalculateAllCjPrices falls back to stored cost when CJ is unavailable
+- Add recalcPricesFromStoredCost: recompute prices locally on startup without hitting CJ, so prices always match the formula and never depend on a live CJ fetch

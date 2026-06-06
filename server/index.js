@@ -60,6 +60,7 @@ import {
   syncMyCjProductsToStore,
   recalculateAllCjPrices,
   recalculateStaleCjPrices,
+  recalcPricesFromStoredCost,
   refreshStaleCjVideos,
   refreshAllCjVideos,
   refreshProductVideos,
@@ -1131,6 +1132,14 @@ async function start() {
     if (!isEmailConfigured()) {
       console.warn('⚠️  SENDGRID_API_KEY / RESEND_API_KEY לא מוגדר – מיילים לא יישלחו');
     }
+    recalcPricesFromStoredCost(DEFAULT_MARKUP_PERCENT)
+      .then((rows) => {
+        if (rows.length) {
+          console.log(`מחירים: עודכנו ${rows.length} מוצרים מהעלות השמורה (ללא CJ)`);
+        }
+      })
+      .catch((err) => console.warn('local price recalc:', err.message));
+
     if (isCjConfigured()) {
       recalculateAllCjPrices(DEFAULT_MARKUP_PERCENT)
         .then((rows) => {

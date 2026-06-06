@@ -178,6 +178,8 @@ async function migrateProductCjColumns() {
     ['images', 'JSON NULL'],
     ['video_url', 'VARCHAR(500) DEFAULT NULL'],
     ['videos', 'JSON NULL'],
+    ['cost_usd', 'DECIMAL(10,2) DEFAULT NULL'],
+    ['shipping_usd', 'DECIMAL(10,2) DEFAULT NULL'],
   ];
   for (const [name, def] of cols) {
     try {
@@ -367,6 +369,8 @@ function mapProduct(row) {
     createdAt: row.created_at ? new Date(row.created_at).toISOString() : null,
     cjPid: row.cj_pid || null,
     cjSku: row.cj_sku || null,
+    costUsd: row.cost_usd != null ? Number(row.cost_usd) : null,
+    shippingUsd: row.shipping_usd != null ? Number(row.shipping_usd) : null,
     images: parseImagesColumn(row.images, row.image),
     videoUrl: row.video_url || '',
     videos: parseVideosColumn(row.videos, row.video_url),
@@ -532,8 +536,8 @@ export async function createProduct(body) {
   const images = body.images?.length ? body.images : body.image ? [body.image] : [];
   const mainImage = images[0] || body.image || '';
   const [result] = await pool.query(
-    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku, images, video_url, videos)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+    `INSERT INTO products (sku, name, description, price, sale_price, image, brand, category_id, google_category, stock, gtin, featured, active, cj_pid, cj_sku, images, video_url, videos, cost_usd, shipping_usd)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       body.sku || `SKU-${Date.now()}`,
       body.name,
@@ -553,6 +557,8 @@ export async function createProduct(body) {
       images.length ? JSON.stringify(images) : null,
       body.videoUrl || null,
       body.videos?.length ? JSON.stringify(body.videos) : null,
+      body.costUsd != null && Number.isFinite(Number(body.costUsd)) ? Number(body.costUsd) : null,
+      body.shippingUsd != null && Number.isFinite(Number(body.shippingUsd)) ? Number(body.shippingUsd) : null,
     ]
   );
   return getProductById(result.insertId);
@@ -595,6 +601,8 @@ export async function importCjProductsToStore(cjItems, categoryId, markupPercent
         active: true,
         cjPid: String(item.pid),
         cjSku: String(item.sku || ''),
+        costUsd: Number(item.cost ?? item.costUsd),
+        shippingUsd: Number(item.shippingUsd),
       };
       const existingId = await getProductByCjPid(item.pid);
       if (existingId) {
@@ -624,7 +632,7 @@ export async function updateProduct(id, body) {
           : [];
   const mainImage = images[0] || (body.image ?? existing.image);
   await pool.query(
-    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=?, images=?, video_url=?, videos=? WHERE id=?`,
+    `UPDATE products SET sku=?, name=?, description=?, price=?, sale_price=?, image=?, brand=?, category_id=?, google_category=?, stock=?, gtin=?, featured=?, active=?, images=?, video_url=?, videos=?, cost_usd=?, shipping_usd=? WHERE id=?`,
     [
       body.sku ?? existing.sku,
       body.name ?? existing.name,
@@ -652,6 +660,12 @@ export async function updateProduct(id, body) {
         : existing.videos?.length
           ? JSON.stringify(existing.videos)
           : null,
+      body.costUsd != null && Number.isFinite(Number(body.costUsd))
+        ? Number(body.costUsd)
+        : existing.costUsd,
+      body.shippingUsd != null && Number.isFinite(Number(body.shippingUsd))
+        ? Number(body.shippingUsd)
+        : existing.shippingUsd,
       id,
     ]
   );
