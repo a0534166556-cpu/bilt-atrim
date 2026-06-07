@@ -1,13 +1,13 @@
 /**
  * מחיר CJ בדולרים → מחיר מכירה בשקלים
- * (עלות מוצר + משלוח CJ) × שער × (1 + אחוז רווח)
+ * (עלות מוצר + משלוח CJ) × שער × (1 + אחוז רווח)  [ברירת מחדל: רווח 75%]
  * המחיר כולל משלוח – הלקוח מקבל משלוח חינם בקופה.
  */
 
 /** אחוז הרווח על העלות הכוללת (מוצר + משלוח) */
 export const DEFAULT_MARKUP_PERCENT = (() => {
   const m = Number(process.env.CJ_MARKUP_PERCENT);
-  return Number.isFinite(m) && m >= 0 ? m : 25;
+  return Number.isFinite(m) && m >= 0 ? m : 75;
 })();
 
 export function getUsdToIlsRate() {

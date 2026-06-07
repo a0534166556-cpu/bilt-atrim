@@ -25,7 +25,7 @@ export default function AdminCJImport() {
   const [selected, setSelected] = useState(new Set());
   const [categories, setCategories] = useState([]);
   const [categoryId, setCategoryId] = useState('electronics');
-  const [markup, setMarkup] = useState(30);
+  const [markup, setMarkup] = useState(75);
   const [loading, setLoading] = useState(false);
   const [loadingMy, setLoadingMy] = useState(false);
   const [importing, setImporting] = useState(false);

@@ -1145,7 +1145,7 @@ async function start() {
         .then((rows) => {
           const ok = rows.filter((r) => r.price != null);
           if (ok.length) {
-            console.log(`CJ: עודכנו מחירים ל-${ok.length} מוצרים (עלות+משלוח ×1.25 → שקל)`);
+            console.log(`CJ: עודכנו מחירים ל-${ok.length} מוצרים (עלות+משלוח ×1.75 → שקל)`);
           }
         })
         .catch((err) => console.warn('CJ price recalc:', err.message));
