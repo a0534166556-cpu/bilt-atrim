@@ -484,7 +484,7 @@ export async function recalculateAllCjPrices(markupPercent = DEFAULT_MARKUP_PERC
   clearMyProductPriceCache();
   const { getAllProducts, updateProduct } = await import('./db.js');
   const products = await getAllProducts();
-  let cjProducts = products.filter((p) => p.cjPid);
+  let cjProducts = products.filter((p) => p.cjPid && !p.priceLocked);
   if (onlyStale) {
     cjProducts = cjProducts.filter((p) => isLikelyStaleCjPrice(p.price));
   }
@@ -545,6 +545,7 @@ export async function recalcPricesFromStoredCost(markupPercent = DEFAULT_MARKUP_
   const products = await getAllProducts();
   const results = [];
   for (const p of products) {
+    if (p.priceLocked) continue;
     if (p.costUsd == null || !Number.isFinite(Number(p.costUsd)) || Number(p.costUsd) <= 0) {
       continue;
     }

@@ -24,7 +24,17 @@ const empty = {
   gtin: '',
   featured: false,
   active: true,
+  priceLocked: false,
 };
+
+const MARKUP_PERCENT = 75;
+const USD_TO_ILS = 3.75;
+
+function suggestPriceFromCost(totalCostUsd) {
+  const cost = Number(totalCostUsd);
+  if (!Number.isFinite(cost) || cost <= 0) return null;
+  return Math.max(5, Math.ceil(cost * (1 + MARKUP_PERCENT / 100) * USD_TO_ILS));
+}
 
 export default function AdminProductForm() {
   const { id } = useParams();
@@ -35,6 +45,7 @@ export default function AdminProductForm() {
   const [categories, setCategories] = useState([]);
   const [loading, setLoading] = useState(false);
   const [translating, setTranslating] = useState(false);
+  const [cjCost, setCjCost] = useState('');
 
   useEffect(() => {
     fetchCategories().then(setCategories);
@@ -56,7 +67,9 @@ export default function AdminProductForm() {
             gtin: p.gtin || '',
             featured: !!p.featured,
             active: p.active !== false,
+            priceLocked: !!p.priceLocked,
           });
+          if (p.costUsd) setCjCost(String(p.costUsd));
         }
       });
     }
@@ -88,6 +101,16 @@ export default function AdminProductForm() {
     }
   };
 
+  const applyCostToPrice = () => {
+    const suggested = suggestPriceFromCost(cjCost);
+    if (suggested == null) {
+      showToast('הזן עלות כוללת תקינה בדולר', 'error');
+      return;
+    }
+    setForm((f) => ({ ...f, price: suggested, priceLocked: true }));
+    showToast(`מחיר חושב: ₪${suggested} (רווח ${MARKUP_PERCENT}%)`);
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -96,7 +119,12 @@ export default function AdminProductForm() {
       price: Number(form.price),
       salePrice: form.salePrice ? Number(form.salePrice) : null,
       stock: Number(form.stock),
+      priceLocked: !!form.priceLocked,
     };
+    if (cjCost && Number(cjCost) > 0) {
+      payload.costUsd = Number(cjCost);
+      payload.shippingUsd = 0;
+    }
     try {
       if (isEdit) {
         await adminUpdateProduct(id, payload);
@@ -129,6 +157,42 @@ export default function AdminProductForm() {
           <label>מחיר מבצע
             <input name="salePrice" type="number" min="0" step="0.01" value={form.salePrice} onChange={handleChange} />
           </label>
+          <div className="cj-cost-helper full-width">
+            <strong>תמחור מ-CJ</strong>
+            <p>
+              העתק מ-CJ את <b>"Total"</b> (עלות מוצר + משלוח, בדולר) → המערכת תחשב מחיר עם רווח {MARKUP_PERCENT}%.
+            </p>
+            <div className="cj-cost-row">
+              <label>
+                עלות כוללת מ-CJ ($)
+                <input
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  value={cjCost}
+                  onChange={(e) => setCjCost(e.target.value)}
+                  placeholder="לדוגמה 23.05"
+                />
+              </label>
+              <button type="button" className="btn btn-outline btn-sm" onClick={applyCostToPrice}>
+                חשב והחל מחיר
+              </button>
+              {suggestPriceFromCost(cjCost) != null && (
+                <span className="cj-cost-preview">
+                  מחיר מחושב: <b>₪{suggestPriceFromCost(cjCost)}</b>
+                </span>
+              )}
+            </div>
+            <label className="checkbox-label">
+              <input
+                type="checkbox"
+                name="priceLocked"
+                checked={form.priceLocked}
+                onChange={handleChange}
+              />
+              נעל מחיר ידני (אל תעדכן אוטומטית מ-CJ)
+            </label>
+          </div>
           <label>מלאי
             <input name="stock" type="number" min="0" value={form.stock} onChange={handleChange} required />
           </label>
